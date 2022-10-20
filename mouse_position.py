@@ -13,7 +13,9 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
     bl_label = "Convex Decomposition of Selected Object"
 
     def execute(self, context):
-        if bpy.context.object.mode == 'EDIT': pass
+        if bpy.context.object.mode == 'EDIT':
+            self.report({'ERROR'}, "Must be in Object mode to use Convex Decomposition")
+            return {'FINISHED'}
 
         selected = bpy.context.selected_objects
         if len(selected) != 1:
