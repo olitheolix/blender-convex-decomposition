@@ -74,7 +74,6 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
 
             # Link the object to our dedicated VHACD collection.
             vhacd_collection.objects.link(obj)
-            break
 
         # Re-select the original object again for a consistent user experience.
         bpy.ops.object.select_all(action='DESELECT')
