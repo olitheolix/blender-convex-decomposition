@@ -1,4 +1,5 @@
 import pathlib
+import random
 import subprocess
 from pathlib import Path
 
@@ -71,6 +72,13 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
             # Unlink the current object from all its collections.
             for coll in obj.users_collection:
                 coll.objects.unlink(obj)
+
+            red, green, blue = random.random(), random.random(), random.random()
+            alpha = 0.5
+            material = bpy.data.materials.new("vhacd random material")
+            material.diffuse_color = (red, green, blue, alpha)
+            obj.data.materials.clear()
+            obj.data.materials.append(material)
 
             # Link the object to our dedicated VHACD collection.
             vhacd_collection.objects.link(obj)
