@@ -86,6 +86,10 @@ class SimpleMouseOperator(bpy.types.Operator):
             vhacd_collection.objects.link(obj)
             break
 
+        # Re-select the original object again for a consistent user experience.
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.data.objects[orig_name].select_set(True)
+
         return {'FINISHED'}
 
     def invoke(self, context, event):
