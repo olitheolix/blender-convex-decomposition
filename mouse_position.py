@@ -41,6 +41,12 @@ class SimpleMouseOperator(bpy.types.Operator):
         out_files = list(fpath.glob(pattern))
         self.report({"INFO"}, f"Produced {len(out_files)} files")
 
+        try:
+            vhacd_collection = bpy.data.collections["vhacd"]
+        except KeyError:
+            vhacd_collection = bpy.data.collections.new("vhacd")
+            bpy.context.scene.collection.children.link(vhacd_collection)
+
         for fname in out_files:
             # Import the new object. Blender will automatically select it.
             bpy.ops.import_scene.obj(filepath=str(fname), filter_glob='*.obj')
@@ -48,13 +54,21 @@ class SimpleMouseOperator(bpy.types.Operator):
             # Sanity check: Blender must have selected the just imported object.
             selected = bpy.context.selected_objects
             assert len(selected) == 1
+            obj = selected[0]
 
             # Ensure we really have the correct object.
             stem_name = str(fname.stem)  # eg /tmp/src012.txt -> src012
 
             suffix = stem_name.partition("src")[2]  # src012 -> 012
-            obj_name = f"UCX_{orig_name}_{suffix}"
-            selected[0].name = obj_name
+            obj.name = f"UCX_{orig_name}_{suffix}"
+
+            # Unlink the current object from all the collections it is
+            # associated with.
+            for coll in obj.users_collection:
+                coll.objects.unlink(obj)
+
+            # Link the object to the VHACD collection.
+            vhacd_collection.objects.link(obj)
             break
 
         return {'FINISHED'}
