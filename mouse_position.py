@@ -5,23 +5,15 @@ from pathlib import Path
 import bpy
 
 
-class SimpleMouseOperator(bpy.types.Operator):
-    """ This operator shows the mouse location,
-        this string is used for the tooltip and API docs
+class ConvexDecompositionVHACD(bpy.types.Operator):
+    """ This operator produces used VHACD to produce Unreal compliant collision
+        shapes for it.
     """
-    bl_idname = "wm.mouse_position"
-    bl_label = "Invoke Mouse Operator"
-
-    x: bpy.props.IntProperty()
-    y: bpy.props.IntProperty()
+    bl_idname = "wm.vhacd"
+    bl_label = "Convex Decomposition of Selected Object"
 
     def execute(self, context):
         if bpy.context.object.mode == 'EDIT': pass
-
-
-        # rather than printing, use the report function,
-        # this way the message appears in the header,
-        self.report({'INFO'}, "Mouse coords are %d %d" % (self.x, self.y))
 
         selected = bpy.context.selected_objects
         if len(selected) != 1:
@@ -35,7 +27,6 @@ class SimpleMouseOperator(bpy.types.Operator):
         fname = fpath / "src.obj"
         bpy.ops.export_scene.obj(filepath=str(fname), check_existing=False,
                                  use_selection=True, use_materials=False)
-
         # Call VHACD to do the convex decomposition.
         subprocess.run(["vhacd", str(fname), "-o", "obj"])
 
@@ -96,12 +87,9 @@ class SimpleMouseOperator(bpy.types.Operator):
 
 # Only needed if you want to add into a dynamic menu.
 def menu_func(self, context):
-    self.layout.operator(SimpleMouseOperator.bl_idname, text="Simple Mouse Operator")
-
+    self.layout.operator(ConvexDecompositionVHACD.bl_idname, text="Convex Decomposition for Unreal Engine")
 
 # Register and add to the view menu (required to also use F3 search "Simple Mouse Operator" for quick access)
-bpy.utils.register_class(SimpleMouseOperator)
+bpy.utils.register_class(ConvexDecompositionVHACD)
 bpy.types.VIEW3D_MT_view.append(menu_func)
 
-# Ensure the UI is always in "Object" mode after we reload this script.
-bpy.ops.object.mode_set(mode='OBJECT')
