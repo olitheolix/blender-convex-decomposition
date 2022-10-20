@@ -7,8 +7,7 @@ import bpy
 
 
 class ConvexDecompositionVHACD(bpy.types.Operator):
-    """ This operator produces used VHACD to produce Unreal compliant collision
-        shapes for it.
+    """ This operator used VHACD to produce collision shapes for Unreal Engine.
     """
     bl_idname = "wm.vhacd"
     bl_label = "Convex Decomposition of Selected Object"
@@ -16,7 +15,7 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
     def execute(self, context):
         # Abort if we are not in OBJECT mode.
         if bpy.context.object.mode != 'OBJECT':
-            self.report({'ERROR'}, "Must be in Object mode to use Convex Decomposition")
+            self.report({'ERROR'}, "Must be in OBJECT mode to use Convex Decomposition")
             return {'FINISHED'}
 
         # Get a handle to the selected object. Abort unless exactly one object
@@ -84,7 +83,7 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
 
             # Assign the collision shape partly transparent object with a
             # random color.
-            red, green, blue = random.random(), random.random(), random.random()
+            red, green, blue = [random.random() for _ in range(3)]
             alpha = 0.5
             material = bpy.data.materials.new("vhacd random material")
             material.diffuse_color = (red, green, blue, alpha)
@@ -112,4 +111,3 @@ def menu_func(self, context):
 # Register and add to the view menu (required to also use F3 search "Simple Mouse Operator" for quick access)
 bpy.utils.register_class(ConvexDecompositionVHACD)
 bpy.types.VIEW3D_MT_view.append(menu_func)
-
