@@ -16,6 +16,9 @@ class SimpleMouseOperator(bpy.types.Operator):
     y: bpy.props.IntProperty()
 
     def execute(self, context):
+        if bpy.context.object.mode == 'EDIT': pass
+
+
         # rather than printing, use the report function,
         # this way the message appears in the header,
         self.report({'INFO'}, "Mouse coords are %d %d" % (self.x, self.y))
@@ -41,6 +44,15 @@ class SimpleMouseOperator(bpy.types.Operator):
         out_files = list(fpath.glob(pattern))
         self.report({"INFO"}, f"Produced {len(out_files)} files")
 
+        # Deselect all objects.
+        bpy.ops.object.select_all(action='DESELECT')
+
+        # Select all VHACD collision objects from a previous run if there were any.
+        for obj in bpy.data.objects:
+            if obj.name.startswith(f"UCX_{orig_name}_"):
+                obj.select_set(True)
+        bpy.ops.object.delete()
+
         try:
             vhacd_collection = bpy.data.collections["vhacd"]
         except KeyError:
@@ -60,6 +72,9 @@ class SimpleMouseOperator(bpy.types.Operator):
             stem_name = str(fname.stem)  # eg /tmp/src012.txt -> src012
 
             suffix = stem_name.partition("src")[2]  # src012 -> 012
+
+            bpy.context.scene.objects
+
             obj.name = f"UCX_{orig_name}_{suffix}"
 
             # Unlink the current object from all the collections it is
@@ -87,3 +102,5 @@ def menu_func(self, context):
 bpy.utils.register_class(SimpleMouseOperator)
 bpy.types.VIEW3D_MT_view.append(menu_func)
 
+# Ensure the UI is always in "Object" mode after we reload this script.
+bpy.ops.object.mode_set(mode='OBJECT')
