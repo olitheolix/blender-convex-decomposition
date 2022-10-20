@@ -24,7 +24,8 @@ class SimpleMouseOperator(bpy.types.Operator):
         if len(selected) != 1:
             self.report({'INFO'}, "Must have exactly one object selected")
             return
-        self.report({'INFO'}, f"Decomposing {selected[0].name}")
+        orig_name = selected[0].name
+        self.report({'INFO'}, f"Decomposing {orig_name}")
 
         fpath = Path("/tmp/foo")
         pathlib.Path.mkdir(fpath, exist_ok=True)
@@ -39,6 +40,22 @@ class SimpleMouseOperator(bpy.types.Operator):
         pattern = str(fname.stem) + "*.obj"
         out_files = list(fpath.glob(pattern))
         self.report({"INFO"}, f"Produced {len(out_files)} files")
+
+        for fname in out_files:
+            # Import the new object. Blender will automatically select it.
+            bpy.ops.import_scene.obj(filepath=str(fname), filter_glob='*.obj')
+
+            # Sanity check: Blender must have selected the just imported object.
+            selected = bpy.context.selected_objects
+            assert len(selected) == 1
+
+            # Ensure we really have the correct object.
+            stem_name = str(fname.stem)  # eg /tmp/src012.txt -> src012
+
+            suffix = stem_name.partition("src")[2]  # src012 -> 012
+            obj_name = f"UCX_{orig_name}_{suffix}"
+            selected[0].name = obj_name
+            break
 
         return {'FINISHED'}
 
