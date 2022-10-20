@@ -20,7 +20,7 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
             self.report({'INFO'}, "Must have exactly one object selected")
             return
         orig_name = selected[0].name
-        self.report({'INFO'}, f"Decomposing {orig_name}")
+        self.report({'INFO'}, f"Computing Collision Meshes for <{orig_name}>")
 
         fpath = Path("/tmp/foo")
         pathlib.Path.mkdir(fpath, exist_ok=True)
@@ -33,7 +33,7 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         fname.unlink()
         pattern = str(fname.stem) + "*.obj"
         out_files = list(fpath.glob(pattern))
-        self.report({"INFO"}, f"Produced {len(out_files)} files")
+        self.report({"INFO"}, f"Produced {len(out_files)} Collision Meshes")
 
         # Deselect all objects.
         bpy.ops.object.select_all(action='DESELECT')
