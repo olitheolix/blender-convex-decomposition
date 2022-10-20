@@ -68,21 +68,18 @@ class SimpleMouseOperator(bpy.types.Operator):
             assert len(selected) == 1
             obj = selected[0]
 
-            # Ensure we really have the correct object.
-            stem_name = str(fname.stem)  # eg /tmp/src012.txt -> src012
-
+            # Extract the numerical suffix, ie /tmp/src012.obj -> 012
+            stem_name = str(fname.stem)  # eg /tmp/src012.obj -> src012
             suffix = stem_name.partition("src")[2]  # src012 -> 012
 
-            bpy.context.scene.objects
-
+            # Rename the object to match Unreal's FBX convention for collision shapes.
             obj.name = f"UCX_{orig_name}_{suffix}"
 
-            # Unlink the current object from all the collections it is
-            # associated with.
+            # Unlink the current object from all its collections.
             for coll in obj.users_collection:
                 coll.objects.unlink(obj)
 
-            # Link the object to the VHACD collection.
+            # Link the object to our dedicated VHACD collection.
             vhacd_collection.objects.link(obj)
             break
 
