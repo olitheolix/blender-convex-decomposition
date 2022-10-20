@@ -14,10 +14,13 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
     bl_label = "Convex Decomposition of Selected Object"
 
     def execute(self, context):
-        if bpy.context.object.mode == 'EDIT':
+        # Abort if we are not in OBJECT mode.
+        if bpy.context.object.mode != 'OBJECT':
             self.report({'ERROR'}, "Must be in Object mode to use Convex Decomposition")
             return {'FINISHED'}
 
+        # Get a handle to the selected object. Abort unless exactly one object
+        # is selected.
         selected = bpy.context.selected_objects
         if len(selected) != 1:
             self.report({'INFO'}, "Must have exactly one object selected")
@@ -25,34 +28,40 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         orig_name = selected[0].name
         self.report({'INFO'}, f"Computing Collision Meshes for <{orig_name}>")
 
+        # Save selected object as an .obj file to a temporary location.
         fpath = Path("/tmp/foo")
         pathlib.Path.mkdir(fpath, exist_ok=True)
         fname = fpath / "src.obj"
         bpy.ops.export_scene.obj(filepath=str(fname), check_existing=False,
                                  use_selection=True, use_materials=False)
+
         # Call VHACD to do the convex decomposition.
         subprocess.run(["vhacd", str(fname), "-o", "obj"])
 
+        # Delete the original object from the temporary location and fetch the
+        # list of all created collision shapes.
         fname.unlink()
         pattern = str(fname.stem) + "*.obj"
         out_files = list(fpath.glob(pattern))
         self.report({"INFO"}, f"Produced {len(out_files)} Collision Meshes")
 
-        # Deselect all objects.
+        # Remove all stale collision shapes for the current object.
         bpy.ops.object.select_all(action='DESELECT')
-
-        # Select all VHACD collision objects from a previous run if there were any.
         for obj in bpy.data.objects:
             if obj.name.startswith(f"UCX_{orig_name}_"):
                 obj.select_set(True)
         bpy.ops.object.delete()
 
+        # Create a dedicated "vhacd" collection if it does not exist yet.
         try:
             vhacd_collection = bpy.data.collections["vhacd"]
         except KeyError:
             vhacd_collection = bpy.data.collections.new("vhacd")
             bpy.context.scene.collection.children.link(vhacd_collection)
 
+        # Load each generated collision mesh into Blender, give it a name that
+        # will work with Unreal Engine (eg 'UCX_objname_123') and also assign
+        # it a random material.
         for fname in out_files:
             # Import the new object. Blender will automatically select it.
             bpy.ops.import_scene.obj(filepath=str(fname), filter_glob='*.obj')
@@ -73,6 +82,8 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
             for coll in obj.users_collection:
                 coll.objects.unlink(obj)
 
+            # Assign the collision shape partly transparent object with a
+            # random color.
             red, green, blue = random.random(), random.random(), random.random()
             alpha = 0.5
             material = bpy.data.materials.new("vhacd random material")
