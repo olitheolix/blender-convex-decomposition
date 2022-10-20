@@ -99,15 +99,12 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
 
         return {'FINISHED'}
 
-    def invoke(self, context, event):
-        self.x = event.mouse_x
-        self.y = event.mouse_y
-        return self.execute(context)
 
 # Only needed if you want to add into a dynamic menu.
 def menu_func(self, context):
     self.layout.operator(ConvexDecompositionVHACD.bl_idname, text="Convex Decomposition for Unreal Engine")
 
-# Register and add to the view menu (required to also use F3 search "Simple Mouse Operator" for quick access)
+# Register and add to the view menu. This will also make it appear in the
+# Search menu (F3 key) under "Convex Decomposition for Unreal Engine".
 bpy.utils.register_class(ConvexDecompositionVHACD)
 bpy.types.VIEW3D_MT_view.append(menu_func)
