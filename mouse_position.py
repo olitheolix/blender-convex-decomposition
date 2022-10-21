@@ -2,7 +2,7 @@ import pathlib
 import random
 import subprocess
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 import bpy
 import bpy_types
@@ -95,37 +95,42 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         bpy.ops.import_scene.obj(filepath=str(merged_obj_file), filter_glob='*.obj')
         del merged_obj_file
 
-    def execute(self, context):
-        collection_name = "convex hulls"
-        hull_prefix = "_tmphull_"
-
-        # Abort if we are not in OBJECT mode.
+    def get_selected_object(self) -> Tuple[bpy_types.Object, bool]:
+        # User must be in OBJECT mode.
         if bpy.context.object.mode != 'OBJECT':
             self.report({'ERROR'}, "Must be in OBJECT mode")
-            return {'FINISHED'}
+            return None, True
 
-        # Get a handle to the selected object. Abort unless exactly one object
-        # is selected.
+        # User must have exactly one object selected.
         selected = bpy.context.selected_objects
         if len(selected) != 1:
-            self.report({'INFO'}, "Must have exactly one object selected")
-            return
-        root_obj = selected[0]
-        self.report({'INFO'}, f"Computing Collision Meshes for <{root_obj.name}>")
+            self.report({'ERROR'}, "Must have exactly one object selected")
+            return None, True
 
+        return selected[0], False
+
+    def execute(self, context):
+        collection_name = "convex hulls"
+        tmp_obj_prefix = "_tmphull_"
+
+        root_obj, err = self.get_selected_object()
+        if err:
+            return {'FINISHED'}
+
+        self.report({'INFO'}, f"Computing Collision Meshes for <{root_obj.name}>")
         self.remove_stale_hulls(root_obj.name)
 
-        # Save selected object as an .obj file to a temporary location.
+        # Save the selected root object as a temporary .obj file.
         fname = self.export_object()
-        self.run_vhacd(fname, hull_prefix)
 
-        hull_objs = self.rename_hulls(hull_prefix, root_obj.name)
+        # Run the convex decomposition.
+        self.run_vhacd(fname, tmp_obj_prefix)
 
+        # Clean up the object names after the import.
+        hull_objs = self.rename_hulls(tmp_obj_prefix, root_obj.name)
+
+        # Put all objects into a dedicated collection and randomise their colour.
         hull_collection = self.make_collection(collection_name)
-
-        # Load each generated collision mesh into Blender, give it a name that
-        # will work with Unreal Engine (eg 'UCX_objname_123') and also assign
-        # it a random material.
         for obj in hull_objs:
             # Unlink the current object from all its collections.
             for coll in obj.users_collection:
@@ -134,10 +139,10 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
             # Link the object to our dedicated collection.
             hull_collection.objects.link(obj)
 
-            # Assign the hull a random colour.
+            # Assign a random colour to the hull.
             self.randomise_colour(obj)
 
-        # Re-select the original object again for a consistent user experience.
+        # Re-select the root object again for a consistent user experience.
         bpy.ops.object.select_all(action='DESELECT')
         root_obj.select_set(True)
 
