@@ -73,6 +73,15 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         out.write_text(data)
         return out
 
+    def rename_hulls(self, hull_prefix: str, obj_name: str) -> List[str]:
+        objs = [_ for _ in bpy.data.objects if _.name.startswith(hull_prefix)]
+        names = []
+        for i, obj in enumerate(objs):
+            name = f"UCX_{obj_name}_{i}"
+            names.append(name)
+            obj.name = name
+        return names
+
     def execute(self, context):
         # Abort if we are not in OBJECT mode.
         if bpy.context.object.mode != 'OBJECT':
@@ -107,6 +116,8 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         merged_obj_file = self.merge_obj_files(hull_prefix, out_files)
         bpy.ops.import_scene.obj(filepath=str(merged_obj_file), filter_glob='*.obj')
         del merged_obj_file
+
+        self.rename_hulls(hull_prefix, obj_name)
         del hull_prefix
 
         return {'FINISHED'}
