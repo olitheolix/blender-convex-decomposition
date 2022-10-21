@@ -49,7 +49,7 @@ class ConvexDecompositionOperator(bpy.types.Operator):
     bl_idname = 'opr.convex_decomp'
     bl_label = 'Convex Decomposition'
 
-    def make_collection(self, collection_name: str) -> bpy_types.Collection:
+    def upsert_collection(self, collection_name: str) -> bpy_types.Collection:
         """ Upsert a dedicated outliner collection for the convex hulls."""
         try:
             collection = bpy.data.collections[collection_name]
@@ -182,7 +182,7 @@ class ConvexDecompositionOperator(bpy.types.Operator):
 
         # Parent the hulls to the root object, randomise their colour and place
         # them into a dedicated collection.
-        hull_collection = self.make_collection(collection_name)
+        hull_collection = self.upsert_collection(collection_name)
         for obj in hull_objs:
             # Unlink the current object from all its collections.
             for coll in obj.users_collection:
