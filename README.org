@@ -1,0 +1,11 @@
+* blender2unreal
+
+** Todo [1/8]:
+   - [X] Rename =mouse-pointer=
+   - [ ] Figure out the registration process
+   - [ ] Create plugin
+   - [ ] Expose solver parameters
+   - [ ] Error checks when calling the solver
+   - [ ] Gray out solvers that were not found
+   - [ ] Rename property group
+   - [ ] Fix the empty export problem
