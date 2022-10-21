@@ -4,15 +4,26 @@ import subprocess
 from pathlib import Path
 from typing import List, Tuple
 
-import bpy
-import bpy_types
+import bpy  # type: ignore
+import bpy_types  # type: ignore
+
+bl_info = {
+    'name': 'Unreal Blender',
+    'blender': (3, 4, 0),
+    'category': 'Object',
+    'version': (0, 1, 0),
+    'author': 'Oliver Nagy',
+    'description': 'Create collision shapes and export them to Unreal Engine',
+    'warning': 'WIP',
+}
 
 
-class ConvexDecompositionVHACD(bpy.types.Operator):
-    """ This operator used VHACD to produce collision shapes for Unreal Engine.
+class ConvexDecompositionOperator(bpy.types.Operator):
+    """Use VHACD or CoACD to create convex decompositions of objects.
     """
-    bl_idname = "wm.vhacd"
-    bl_label = "Convex Decomposition of Selected Object"
+
+    bl_idname = 'opr.convex_decomp'
+    bl_label = 'Convex Decomposition'
 
     def make_collection(self, collection_name: str) -> bpy_types.Collection:
         """ Upsert a dedicated outliner collection for the convex hulls."""
@@ -110,6 +121,9 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         return selected[0], False
 
     def execute(self, context):
+        props = context.scene.ConvDecompProperties
+        self.report({'INFO'}, f"Using {props.solver}")
+
         collection_name = "convex hulls"
         tmp_obj_prefix = "_tmphull_"
 
@@ -155,11 +169,69 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         return {'FINISHED'}
 
 
-# Only needed if you want to add into a dynamic menu.
-def menu_func(self, context):
-    self.layout.operator(ConvexDecompositionVHACD.bl_idname, text="Convex Decomposition for Unreal Engine")
+class ConvexDecompositionPanel(bpy.types.Panel):
+    bl_idname = 'VIEW3D_PT_ConvDec'
+    bl_label = 'Convex Decomposition'
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "ConvDecomp"
 
-# Register and add to the view menu. This will also make it appear in the
-# Search menu (F3 key) under "Convex Decomposition for Unreal Engine".
-bpy.utils.register_class(ConvexDecompositionVHACD)
-bpy.types.VIEW3D_MT_view.append(menu_func)
+    def draw(self, context):
+        # Convenience.
+        props = context.scene.ConvDecompProperties
+        layout = self.layout
+
+        layout.prop(props, 'solver')
+        if props.solver == "VHACD":
+            prefix = "v_"
+            solver = "opr.convex_decomp"
+        else:
+            prefix = "c_"
+            solver = "opr.convex_decomp"
+
+        layout.row().operator(solver, text="Run")
+        layout.row().prop(props, "both")
+        solver_specific = [_ for _ in props.__annotations__ if _.startswith(prefix)]
+        for name in solver_specific:
+            layout.row().prop(props, name)
+
+
+class ConvexDecompositionProperties(bpy.types.PropertyGroup):
+    v_param: bpy.props.FloatProperty(  # type: ignore
+        name="v_Param",
+        description="VHACD Parameter"
+    )
+    c_param: bpy.props.FloatProperty(  # type: ignore
+        name="c_Param",
+        description="CoACD Parameter"
+    )
+    both: bpy.props.FloatProperty(  # type: ignore
+        name="Shared parameter",
+        description="Shared Parameter"
+    )
+    solver : bpy.props.EnumProperty(                    # type: ignore
+        name="Solver",
+        description="Select Convex Decomposition Solver",
+        items={
+            ('VHACD', 'VHACD', 'Use VHACD'),
+            ('CoACD', 'CoACD', 'Use CoACD'),
+        },
+        default='VHACD',
+    )
+
+
+CLASSES = [ConvexDecompositionPanel, ConvexDecompositionOperator, ConvexDecompositionProperties]
+
+def register():
+    for cls in CLASSES:
+        bpy.utils.register_class(cls)
+
+    bpy.types.Scene.ConvDecompProperties = bpy.props.PointerProperty(type=ConvexDecompositionProperties)
+
+def unregister():
+    for cls in CLASSES:
+        bpy.utils.unregister_class(cls)
+    del bpy.types.Scene.ConvDecompProperties
+
+
+register()
