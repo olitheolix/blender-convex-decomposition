@@ -84,7 +84,7 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
             # Assign the collision shape partly transparent object with a
             # random color.
             red, green, blue = [random.random() for _ in range(3)]
-            alpha = 0.5
+            alpha = 1.0
             material = bpy.data.materials.new("vhacd random material")
             material.diffuse_color = (red, green, blue, alpha)
             obj.data.materials.clear()
