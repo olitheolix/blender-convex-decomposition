@@ -18,7 +18,42 @@ bl_info = {
 }
 
 
-class ConvexDecompositionClearOperator(bpy.types.Operator):
+class ConvexDecompositionBaseOperator(bpy.types.Operator):
+    """Base class with common utility methods"""
+
+    bl_idname = 'opr.convex_decomposition_base'
+    bl_label = 'Convex Decomposition Base Class'
+
+    def remove_stale_hulls(self, name: str) -> None:
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in bpy.data.objects:
+            if obj.name.startswith(f"UCX_{name}_"):
+                obj.select_set(True)
+        bpy.ops.object.delete()
+
+    def rename_hulls(self, hull_prefix: str, obj_name: str) -> List[bpy_types.Object]:
+        objs = [_ for _ in bpy.data.objects if _.name.startswith(hull_prefix)]
+        for i, obj in enumerate(objs):
+            name = f"UCX_{obj_name}_{i}"
+            obj.name = name
+        return objs
+
+    def get_selected_object(self) -> Tuple[bpy_types.Object, bool]:
+        # User must be in OBJECT mode.
+        if bpy.context.object.mode != 'OBJECT':
+            self.report({'ERROR'}, "Must be in OBJECT mode")
+            return None, True
+
+        # User must have exactly one object selected.
+        selected = bpy.context.selected_objects
+        if len(selected) != 1:
+            self.report({'ERROR'}, "Must have exactly one object selected")
+            return None, True
+
+        return selected[0], False
+
+
+class ConvexDecompositionClearOperator(ConvexDecompositionBaseOperator):
     """Clear all collision shapes for selected object."""
 
     bl_idname = 'opr.convex_decomposition_clear'
@@ -30,7 +65,7 @@ class ConvexDecompositionClearOperator(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class ConvexDecompositionUnrealExportOperator(bpy.types.Operator):
+class ConvexDecompositionUnrealExportOperator(ConvexDecompositionBaseOperator):
     """Clear all collision shapes for selected object."""
 
     bl_idname = 'opr.convex_decomposition_unreal_export'
@@ -42,12 +77,10 @@ class ConvexDecompositionUnrealExportOperator(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class ConvexDecompositionOperator(bpy.types.Operator):
-    """Use VHACD or CoACD to create convex decompositions of objects.
-    """
-
-    bl_idname = 'opr.convex_decomp'
-    bl_label = 'Convex Decomposition'
+class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
+    """Use VHACD or CoACD to create a convex decomposition of objects."""
+    bl_idname = 'opr.convex_decomposition_run'
+    bl_label = 'Convex Decomposition Base Class'
 
     def upsert_collection(self, collection_name: str) -> bpy_types.Collection:
         """ Upsert a dedicated outliner collection for the convex hulls."""
@@ -65,13 +98,6 @@ class ConvexDecompositionOperator(bpy.types.Operator):
         bpy.ops.export_scene.obj(filepath=str(fname), check_existing=False,
                                  use_selection=True, use_materials=False)
         return fname
-
-    def remove_stale_hulls(self, name: str) -> None:
-        bpy.ops.object.select_all(action='DESELECT')
-        for obj in bpy.data.objects:
-            if obj.name.startswith(f"UCX_{name}_"):
-                obj.select_set(True)
-        bpy.ops.object.delete()
 
     def randomise_colour(self, obj: bpy_types.Object) -> None:
         red, green, blue = [random.random() for _ in range(3)]
@@ -108,13 +134,6 @@ class ConvexDecompositionOperator(bpy.types.Operator):
         out.write_text(data)
         return out
 
-    def rename_hulls(self, hull_prefix: str, obj_name: str) -> List[bpy_types.Object]:
-        objs = [_ for _ in bpy.data.objects if _.name.startswith(hull_prefix)]
-        for i, obj in enumerate(objs):
-            name = f"UCX_{obj_name}_{i}"
-            obj.name = name
-        return objs
-
     def run_vhacd(self, obj_file_path: Path, hull_prefix: str):
         # Call VHACD to do the convex decomposition.
         subprocess.run(["vhacd", str(obj_file_path), "-o", "obj"])
@@ -130,23 +149,7 @@ class ConvexDecompositionOperator(bpy.types.Operator):
         bpy.ops.import_scene.obj(filepath=str(merged_obj_file), filter_glob='*.obj')
         del merged_obj_file
 
-    def get_selected_object(self) -> Tuple[bpy_types.Object, bool]:
-        # User must be in OBJECT mode.
-        if bpy.context.object.mode != 'OBJECT':
-            self.report({'ERROR'}, "Must be in OBJECT mode")
-            return None, True
-
-        # User must have exactly one object selected.
-        selected = bpy.context.selected_objects
-        if len(selected) != 1:
-            self.report({'ERROR'}, "Must have exactly one object selected")
-            return None, True
-
-        return selected[0], False
-
     def execute(self, context):
-        props = context.scene.ConvDecompProperties
-
         collection_name = "convex hulls"
         tmp_obj_prefix = "_tmphull_"
 
@@ -155,18 +158,6 @@ class ConvexDecompositionOperator(bpy.types.Operator):
             return {'FINISHED'}
 
         self.remove_stale_hulls(root_obj.name)
-
-        if props.mode.lower() == "clear":
-            self.report({'INFO'}, f"Removed convex hulls for {root_obj.name}")
-            return {'FINISHED'}
-
-        if props.mode.lower() == "export":
-            self.export_to_unreal(root_obj)
-            return {'FINISHED'}
-
-        if props.mode.lower() != "decompose":
-            self.report({'ERROR'}, f"Bug: unknown mode <{props.mode.upper()}>")
-            return {'FINISHED'}
 
         self.report({'INFO'}, f"Computing Collision Meshes for <{root_obj.name}>")
 
@@ -220,17 +211,20 @@ class ConvexDecompositionPanel(bpy.types.Panel):
         layout.prop(props, 'solver')
         if props.solver == "VHACD":
             prefix = "v_"
-            solver = "opr.convex_decomp"
-        else:
+        elif props.solver == "CoACD":
             prefix = "c_"
-            solver = "opr.convex_decomp"
+        else:
+            self.report({'ERROR'}, "Unknown Solver <{props.solver}>")
+            return
 
         # Display "Run" button.
-        layout.row().operator(solver, text="Run")
+        layout.row().operator('opr.convex_decomposition_run', text="Run")
 
+        # Display Clear and Export buttons.
         row = layout.row()
         row.operator('opr.convex_decomposition_clear', text="Clear")
         row.operator('opr.convex_decomposition_unreal_export', text="Export")
+
         # Shared parameters.
         layout.row().prop(props, "both")
 
@@ -256,10 +250,6 @@ class ConvexDecompositionProperties(bpy.types.PropertyGroup):
         description="Shared Parameter",
         default=3.0,
     )
-    mode: bpy.props.StringProperty(  # type: ignore
-        name="Operation mode of ConvexDecomposition operator",
-        description="Decompose, Clear or Export"
-    )
     solver : bpy.props.EnumProperty(                    # type: ignore
         name="Solver",
         description="Select Convex Decomposition Solver",
@@ -273,8 +263,8 @@ class ConvexDecompositionProperties(bpy.types.PropertyGroup):
 
 CLASSES = [
     ConvexDecompositionPanel,
-    ConvexDecompositionOperator,
     ConvexDecompositionProperties,
+    ConvexDecompositionRunOperator,
     ConvexDecompositionClearOperator,
     ConvexDecompositionUnrealExportOperator,
 ]
