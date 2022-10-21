@@ -117,11 +117,8 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         bpy.ops.import_scene.obj(filepath=str(merged_obj_file), filter_glob='*.obj')
         del merged_obj_file
 
-        self.rename_hulls(hull_prefix, obj_name)
+        hull_names = self.rename_hulls(hull_prefix, obj_name)
         del hull_prefix
-
-        return {'FINISHED'}
-
 
         collection_name = "vhacd"
         vhacd_collection = self.make_collection(collection_name)
@@ -129,32 +126,18 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         # Load each generated collision mesh into Blender, give it a name that
         # will work with Unreal Engine (eg 'UCX_objname_123') and also assign
         # it a random material.
-        for fname in out_files:
-            # Import the new object. Blender will automatically select it.
-            bpy.ops.import_scene.obj(filepath=str(fname), filter_glob='*.obj')
-
-            # Sanity check: Blender must have selected the just imported object.
-            selected = bpy.context.selected_objects
-            assert len(selected) == 1
-            obj = selected[0]
-
-            # Extract the numerical suffix, ie /tmp/src012.obj -> 012
-            stem_name = str(fname.stem)  # eg /tmp/src012.obj -> src012
-            suffix = stem_name.partition("src")[2]  # src012 -> 012
-
-            # Rename the object to match Unreal's FBX convention for collision shapes.
-            obj.name = f"UCX_{obj_name}_{suffix}"
+        for hull_name in hull_names:
+            obj = bpy.data.objects[hull_name]
 
             # Unlink the current object from all its collections.
             for coll in obj.users_collection:
                 coll.objects.unlink(obj)
 
-            # Assign the collision shape partly transparent object with a
-            # random color.
-            self.randomise_colour(obj)
-
             # Link the object to our dedicated collection.
             vhacd_collection.objects.link(obj)
+
+            # Assign the hull a random colour.
+            self.randomise_colour(obj)
 
         # Re-select the original object again for a consistent user experience.
         bpy.ops.object.select_all(action='DESELECT')
