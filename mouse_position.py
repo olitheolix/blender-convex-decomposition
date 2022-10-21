@@ -188,12 +188,14 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
     def run_coacd(self, obj_file_path: Path, hull_prefix: str):
         # Call CoACD to do the convex decomposition.
         fout = obj_file_path.parent / "hulls.obj"
-        subprocess.run([
+        args = [
             "coacd", "-i", str(obj_file_path),
             "-o", str(fout),
-            "-np", "-mi", "40", "-md", "5",
-            "-mn", "40", "-t", "0.5",
-        ])
+            "-np", "-mi", "400", "-md", "5",
+            "-mn", "40", "-t", "0.05",
+        ]
+        print(args)
+        subprocess.run(args)
 
         # Replace all object names in the OBJ file that CoACD produced.
         data = ""
@@ -218,13 +220,13 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
 
         self.remove_stale_hulls(root_obj.name)
 
-        self.report({'INFO'}, f"Computing Collision Meshes for <{root_obj.name}>")
+        self.report({'INFO'}, f"Computing collision meshes for <{root_obj.name}>")
 
         # Save the selected root object as a temporary .obj file.
         tmp_obj_path = self.save_temporary_obj()
 
         # Run the convex decomposition.
-        self.run_vhacd(tmp_obj_path, tmp_obj_prefix)
+        self.run_coacd(tmp_obj_path, tmp_obj_prefix)
         del tmp_obj_path
 
         # Clean up the object names after the import.
