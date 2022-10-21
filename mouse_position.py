@@ -122,7 +122,6 @@ class ConvexDecompositionOperator(bpy.types.Operator):
 
     def execute(self, context):
         props = context.scene.ConvDecompProperties
-        self.report({'INFO'}, f"Using {props.solver}")
 
         collection_name = "convex hulls"
         tmp_obj_prefix = "_tmphull_"
@@ -131,8 +130,21 @@ class ConvexDecompositionOperator(bpy.types.Operator):
         if err:
             return {'FINISHED'}
 
-        self.report({'INFO'}, f"Computing Collision Meshes for <{root_obj.name}>")
         self.remove_stale_hulls(root_obj.name)
+
+        if props.mode.lower() == "clear":
+            self.report({'INFO'}, f"Removed convex hulls for {root_obj.name}")
+            return {'FINISHED'}
+
+        if props.mode.lower() == "export":
+            self.export_to_unreal(root_obj)
+            return {'FINISHED'}
+
+        if props.mode.lower() != "decompose":
+            self.report({'ERROR'}, f"Bug: unknown mode <{props.mode.upper()}>")
+            return {'FINISHED'}
+
+        self.report({'INFO'}, f"Computing Collision Meshes for <{root_obj.name}>")
 
         # Save the selected root object as a temporary .obj file.
         tmp_obj_path = self.export_object()
@@ -189,8 +201,17 @@ class ConvexDecompositionPanel(bpy.types.Panel):
             prefix = "c_"
             solver = "opr.convex_decomp"
 
+        # Display "Run" button.
         layout.row().operator(solver, text="Run")
+
+        row = layout.row()
+        row.operator(solver, text="Clear")
+        row.operator(solver, text="Export")
+
+        # Shared parameters.
         layout.row().prop(props, "both")
+
+        # Solver Specific parameters.
         solver_specific = [_ for _ in props.__annotations__ if _.startswith(prefix)]
         for name in solver_specific:
             layout.row().prop(props, name)
@@ -199,15 +220,22 @@ class ConvexDecompositionPanel(bpy.types.Panel):
 class ConvexDecompositionProperties(bpy.types.PropertyGroup):
     v_param: bpy.props.FloatProperty(  # type: ignore
         name="v_Param",
-        description="VHACD Parameter"
+        description="VHACD Parameter",
+        default=1.0,
     )
     c_param: bpy.props.FloatProperty(  # type: ignore
         name="c_Param",
-        description="CoACD Parameter"
+        description="CoACD Parameter",
+        default=2.0,
     )
     both: bpy.props.FloatProperty(  # type: ignore
         name="Shared parameter",
-        description="Shared Parameter"
+        description="Shared Parameter",
+        default=3.0,
+    )
+    mode: bpy.props.StringProperty(  # type: ignore
+        name="Operation mode of ConvexDecomposition operator",
+        description="Decompose, Clear or Export"
     )
     solver : bpy.props.EnumProperty(                    # type: ignore
         name="Solver",
