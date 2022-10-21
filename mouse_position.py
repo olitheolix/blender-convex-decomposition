@@ -18,6 +18,30 @@ bl_info = {
 }
 
 
+class ConvexDecompositionClearOperator(bpy.types.Operator):
+    """Clear all collision shapes for selected object."""
+
+    bl_idname = 'opr.convex_decomposition_clear'
+    bl_label = 'Clear Collision Shapes For Selected Object'
+
+    def execute(self, context):
+        props = context.scene.ConvDecompProperties
+        self.report({'INFO'}, f"Clear Collision Shapes")
+        return {'FINISHED'}
+
+
+class ConvexDecompositionUnrealExportOperator(bpy.types.Operator):
+    """Clear all collision shapes for selected object."""
+
+    bl_idname = 'opr.convex_decomposition_unreal_export'
+    bl_label = 'Export object with Unreal Engine compatible collision meshes as FBX'
+
+    def execute(self, context):
+        props = context.scene.ConvDecompProperties
+        self.report({'INFO'}, f"Export object")
+        return {'FINISHED'}
+
+
 class ConvexDecompositionOperator(bpy.types.Operator):
     """Use VHACD or CoACD to create convex decompositions of objects.
     """
@@ -205,9 +229,8 @@ class ConvexDecompositionPanel(bpy.types.Panel):
         layout.row().operator(solver, text="Run")
 
         row = layout.row()
-        row.operator(solver, text="Clear")
-        row.operator(solver, text="Export")
-
+        row.operator('opr.convex_decomposition_clear', text="Clear")
+        row.operator('opr.convex_decomposition_unreal_export', text="Export")
         # Shared parameters.
         layout.row().prop(props, "both")
 
@@ -248,7 +271,13 @@ class ConvexDecompositionProperties(bpy.types.PropertyGroup):
     )
 
 
-CLASSES = [ConvexDecompositionPanel, ConvexDecompositionOperator, ConvexDecompositionProperties]
+CLASSES = [
+    ConvexDecompositionPanel,
+    ConvexDecompositionOperator,
+    ConvexDecompositionProperties,
+    ConvexDecompositionClearOperator,
+    ConvexDecompositionUnrealExportOperator,
+]
 
 def register():
     for cls in CLASSES:
