@@ -185,6 +185,29 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         bpy.ops.import_scene.obj(filepath=str(merged_obj_file), filter_glob='*.obj')
         del merged_obj_file
 
+    def run_coacd(self, obj_file_path: Path, hull_prefix: str):
+        # Call CoACD to do the convex decomposition.
+        fout = obj_file_path.parent / "hulls.obj"
+        subprocess.run([
+            "coacd", "-i", str(obj_file_path),
+            "-o", str(fout),
+            "-np", "-mi", "40", "-md", "5",
+            "-mn", "40", "-t", "0.5",
+        ])
+
+        # Replace all object names in the OBJ file that CoACD produced.
+        data = ""
+        lines = fout.read_text().splitlines()
+        for i, line in enumerate(lines):
+            if line.startswith("o "):
+                data += f"o {hull_prefix}{i}\n"
+            else:
+                data += line + "\n"
+        fout.write_text(data)
+
+        # Import the hulls back into Blender.
+        bpy.ops.import_scene.obj(filepath=str(fout), filter_glob='*.obj')
+
     def execute(self, context):
         collection_name = "convex hulls"
         tmp_obj_prefix = "_tmphull_"
