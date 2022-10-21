@@ -121,10 +121,11 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         self.remove_stale_hulls(root_obj.name)
 
         # Save the selected root object as a temporary .obj file.
-        fname = self.export_object()
+        tmp_obj_path = self.export_object()
 
         # Run the convex decomposition.
-        self.run_vhacd(fname, tmp_obj_prefix)
+        self.run_vhacd(tmp_obj_path, tmp_obj_prefix)
+        del tmp_obj_path
 
         # Clean up the object names after the import.
         hull_objs = self.rename_hulls(tmp_obj_prefix, root_obj.name)
