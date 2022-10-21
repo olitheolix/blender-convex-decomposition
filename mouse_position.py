@@ -130,7 +130,8 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         # Clean up the object names after the import.
         hull_objs = self.rename_hulls(tmp_obj_prefix, root_obj.name)
 
-        # Put all objects into a dedicated collection and randomise their colour.
+        # Parent the hulls to the root object, randomise their colour and place
+        # them into a dedicated collection.
         hull_collection = self.make_collection(collection_name)
         for obj in hull_objs:
             # Unlink the current object from all its collections.
@@ -142,6 +143,10 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
 
             # Assign a random colour to the hull.
             self.randomise_colour(obj)
+
+            # Parent the hull to the root object without changing the relative transform.
+            obj.parent = root_obj
+            obj.matrix_parent_inverse = root_obj.matrix_world.inverted()
 
         # Re-select the root object again for a consistent user experience.
         bpy.ops.object.select_all(action='DESELECT')
