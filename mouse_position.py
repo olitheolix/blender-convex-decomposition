@@ -58,7 +58,7 @@ class ConvexDecompositionOperator(bpy.types.Operator):
             bpy.context.scene.collection.children.link(collection)
         return collection
 
-    def export_object(self) -> Path:
+    def save_temporary_obj(self) -> Path:
         fpath = Path("/tmp/foo")
         pathlib.Path.mkdir(fpath, exist_ok=True)
         fname = fpath / "src.obj"
@@ -171,7 +171,7 @@ class ConvexDecompositionOperator(bpy.types.Operator):
         self.report({'INFO'}, f"Computing Collision Meshes for <{root_obj.name}>")
 
         # Save the selected root object as a temporary .obj file.
-        tmp_obj_path = self.export_object()
+        tmp_obj_path = self.save_temporary_obj()
 
         # Run the convex decomposition.
         self.run_vhacd(tmp_obj_path, tmp_obj_prefix)
