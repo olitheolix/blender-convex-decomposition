@@ -73,14 +73,12 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         out.write_text(data)
         return out
 
-    def rename_hulls(self, hull_prefix: str, obj_name: str) -> List[str]:
+    def rename_hulls(self, hull_prefix: str, obj_name: str) -> List[bpy_types.Object]:
         objs = [_ for _ in bpy.data.objects if _.name.startswith(hull_prefix)]
-        names = []
         for i, obj in enumerate(objs):
             name = f"UCX_{obj_name}_{i}"
-            names.append(name)
             obj.name = name
-        return names
+        return objs
 
     def run_vhacd(self, obj_file_path: Path, hull_prefix: str):
         # Call VHACD to do the convex decomposition.
@@ -112,26 +110,23 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         if len(selected) != 1:
             self.report({'INFO'}, "Must have exactly one object selected")
             return
-        obj_name = selected[0].name
-        self.report({'INFO'}, f"Computing Collision Meshes for <{obj_name}>")
+        root_obj = selected[0]
+        self.report({'INFO'}, f"Computing Collision Meshes for <{root_obj.name}>")
+
+        self.remove_stale_hulls(root_obj.name)
 
         # Save selected object as an .obj file to a temporary location.
         fname = self.export_object()
-
-        self.remove_stale_hulls(obj_name)
-
         self.run_vhacd(fname, hull_prefix)
 
-        hull_names = self.rename_hulls(hull_prefix, obj_name)
+        hull_objs = self.rename_hulls(hull_prefix, root_obj.name)
 
         hull_collection = self.make_collection(collection_name)
 
         # Load each generated collision mesh into Blender, give it a name that
         # will work with Unreal Engine (eg 'UCX_objname_123') and also assign
         # it a random material.
-        for hull_name in hull_names:
-            obj = bpy.data.objects[hull_name]
-
+        for obj in hull_objs:
             # Unlink the current object from all its collections.
             for coll in obj.users_collection:
                 coll.objects.unlink(obj)
@@ -144,7 +139,7 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
 
         # Re-select the original object again for a consistent user experience.
         bpy.ops.object.select_all(action='DESELECT')
-        bpy.data.objects[obj_name].select_set(True)
+        root_obj.select_set(True)
 
         return {'FINISHED'}
 
