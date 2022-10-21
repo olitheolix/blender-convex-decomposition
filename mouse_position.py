@@ -82,7 +82,25 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
             obj.name = name
         return names
 
+    def run_vhacd(self, obj_file_path: Path, hull_prefix: str):
+        # Call VHACD to do the convex decomposition.
+        subprocess.run(["vhacd", str(obj_file_path), "-o", "obj"])
+
+        # Delete the original object from the temporary location and fetch the
+        # list of all created collision shapes.
+        obj_file_path.unlink()
+        pattern = str(obj_file_path.stem) + "*.obj"
+        out_files = list(obj_file_path.parent.glob(pattern))
+        self.report({"INFO"}, f"Produced {len(out_files)} Convex Hulls")
+
+        merged_obj_file = self.merge_obj_files(hull_prefix, out_files)
+        bpy.ops.import_scene.obj(filepath=str(merged_obj_file), filter_glob='*.obj')
+        del merged_obj_file
+
     def execute(self, context):
+        collection_name = "convex hulls"
+        hull_prefix = "_tmphull_"
+
         # Abort if we are not in OBJECT mode.
         if bpy.context.object.mode != 'OBJECT':
             self.report({'ERROR'}, "Must be in OBJECT mode")
@@ -100,28 +118,13 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         # Save selected object as an .obj file to a temporary location.
         fname = self.export_object()
 
-        # Call VHACD to do the convex decomposition.
-        subprocess.run(["vhacd", str(fname), "-o", "obj"])
-
-        # Delete the original object from the temporary location and fetch the
-        # list of all created collision shapes.
-        fname.unlink()
-        pattern = str(fname.stem) + "*.obj"
-        out_files = list(fname.parent.glob(pattern))
-        self.report({"INFO"}, f"Produced {len(out_files)} Convex Hulls")
-
         self.remove_stale_hulls(obj_name)
 
-        hull_prefix = "_tmphull_"
-        merged_obj_file = self.merge_obj_files(hull_prefix, out_files)
-        bpy.ops.import_scene.obj(filepath=str(merged_obj_file), filter_glob='*.obj')
-        del merged_obj_file
+        self.run_vhacd(fname, hull_prefix)
 
         hull_names = self.rename_hulls(hull_prefix, obj_name)
-        del hull_prefix
 
-        collection_name = "vhacd"
-        vhacd_collection = self.make_collection(collection_name)
+        hull_collection = self.make_collection(collection_name)
 
         # Load each generated collision mesh into Blender, give it a name that
         # will work with Unreal Engine (eg 'UCX_objname_123') and also assign
@@ -134,7 +137,7 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
                 coll.objects.unlink(obj)
 
             # Link the object to our dedicated collection.
-            vhacd_collection.objects.link(obj)
+            hull_collection.objects.link(obj)
 
             # Assign the hull a random colour.
             self.randomise_colour(obj)
