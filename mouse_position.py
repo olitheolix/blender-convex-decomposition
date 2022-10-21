@@ -60,8 +60,17 @@ class ConvexDecompositionClearOperator(ConvexDecompositionBaseOperator):
     bl_label = 'Clear Collision Shapes For Selected Object'
 
     def execute(self, context):
-        props = context.scene.ConvDecompProperties
-        self.report({'INFO'}, f"Clear Collision Shapes")
+        root_obj, err = self.get_selected_object()
+        if err:
+            return {'FINISHED'}
+
+        self.remove_stale_hulls(root_obj.name)
+
+        # Re-select the root object again for a consistent user experience.
+        bpy.ops.object.select_all(action='DESELECT')
+        root_obj.select_set(True)
+
+        self.report({'INFO'}, f"Removed all collision shapes from <{root_obj.name}>")
         return {'FINISHED'}
 
 
