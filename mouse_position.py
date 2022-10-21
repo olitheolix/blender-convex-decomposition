@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 import bpy
+import bpy_types
 
 
 class ConvexDecompositionVHACD(bpy.types.Operator):
@@ -12,10 +13,42 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
     bl_idname = "wm.vhacd"
     bl_label = "Convex Decomposition of Selected Object"
 
+    def make_collection(self, collection_name: str) -> bpy_types.Collection:
+        """ Upsert a dedicated outliner collection for the convex hulls."""
+        try:
+            collection = bpy.data.collections[collection_name]
+        except KeyError:
+            collection = bpy.data.collections.new(collection_name)
+            bpy.context.scene.collection.children.link(collection)
+        return collection
+
+    def export_object(self) -> Path:
+        fpath = Path("/tmp/foo")
+        pathlib.Path.mkdir(fpath, exist_ok=True)
+        fname = fpath / "src.obj"
+        bpy.ops.export_scene.obj(filepath=str(fname), check_existing=False,
+                                 use_selection=True, use_materials=False)
+        return fname
+
+    def remove_stale_hulls(self, name: str) -> None:
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in bpy.data.objects:
+            if obj.name.startswith(f"UCX_{name}_"):
+                obj.select_set(True)
+        bpy.ops.object.delete()
+
+    def randomise_colour(self, obj: bpy_types.Object) -> None:
+        red, green, blue = [random.random() for _ in range(3)]
+        alpha = 1.0
+        material = bpy.data.materials.new("random material")
+        material.diffuse_color = (red, green, blue, alpha)
+        obj.data.materials.clear()
+        obj.data.materials.append(material)
+
     def execute(self, context):
         # Abort if we are not in OBJECT mode.
         if bpy.context.object.mode != 'OBJECT':
-            self.report({'ERROR'}, "Must be in OBJECT mode to use Convex Decomposition")
+            self.report({'ERROR'}, "Must be in OBJECT mode")
             return {'FINISHED'}
 
         # Get a handle to the selected object. Abort unless exactly one object
@@ -28,11 +61,7 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         self.report({'INFO'}, f"Computing Collision Meshes for <{orig_name}>")
 
         # Save selected object as an .obj file to a temporary location.
-        fpath = Path("/tmp/foo")
-        pathlib.Path.mkdir(fpath, exist_ok=True)
-        fname = fpath / "src.obj"
-        bpy.ops.export_scene.obj(filepath=str(fname), check_existing=False,
-                                 use_selection=True, use_materials=False)
+        fname = self.export_object()
 
         # Call VHACD to do the convex decomposition.
         subprocess.run(["vhacd", str(fname), "-o", "obj"])
@@ -41,22 +70,14 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         # list of all created collision shapes.
         fname.unlink()
         pattern = str(fname.stem) + "*.obj"
-        out_files = list(fpath.glob(pattern))
-        self.report({"INFO"}, f"Produced {len(out_files)} Collision Meshes")
+        out_files = list(fname.parent.glob(pattern))
+        self.report({"INFO"}, f"Produced {len(out_files)} Convex Hulls")
 
         # Remove all stale collision shapes for the current object.
-        bpy.ops.object.select_all(action='DESELECT')
-        for obj in bpy.data.objects:
-            if obj.name.startswith(f"UCX_{orig_name}_"):
-                obj.select_set(True)
-        bpy.ops.object.delete()
+        self.remove_stale_hulls(orig_name)
 
-        # Create a dedicated "vhacd" collection if it does not exist yet.
-        try:
-            vhacd_collection = bpy.data.collections["vhacd"]
-        except KeyError:
-            vhacd_collection = bpy.data.collections.new("vhacd")
-            bpy.context.scene.collection.children.link(vhacd_collection)
+        collection_name = "vhacd"
+        vhacd_collection = self.make_collection(collection_name)
 
         # Load each generated collision mesh into Blender, give it a name that
         # will work with Unreal Engine (eg 'UCX_objname_123') and also assign
@@ -83,14 +104,9 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
 
             # Assign the collision shape partly transparent object with a
             # random color.
-            red, green, blue = [random.random() for _ in range(3)]
-            alpha = 1.0
-            material = bpy.data.materials.new("vhacd random material")
-            material.diffuse_color = (red, green, blue, alpha)
-            obj.data.materials.clear()
-            obj.data.materials.append(material)
+            self.randomise_colour(obj)
 
-            # Link the object to our dedicated VHACD collection.
+            # Link the object to our dedicated collection.
             vhacd_collection.objects.link(obj)
 
         # Re-select the original object again for a consistent user experience.
