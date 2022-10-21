@@ -80,9 +80,36 @@ class ConvexDecompositionUnrealExportOperator(ConvexDecompositionBaseOperator):
     bl_idname = 'opr.convex_decomposition_unreal_export'
     bl_label = 'Export object with Unreal Engine compatible collision meshes as FBX'
 
+    def unreal_export(self, obj: bpy_types.Object) -> None:
+        root_path = Path(bpy.path.abspath("//"))
+        fname = root_path / f"{obj.name}.fbx"
+
+        # Select all the children of this object.
+        for child in obj.children:
+            if child.name.startswith("UCX_"):
+                child.select_set(True)
+
+        bpy.ops.export_scene.fbx(
+            filepath=str(fname),
+            check_existing=True,
+            use_selection=True,
+            mesh_smooth_type="FACE",
+            axis_forward='-Z',
+            axis_up='Y',
+        )
+        self.report({'INFO'}, f"Exported object to <{fname}>")
+
     def execute(self, context):
-        props = context.scene.ConvDecompProperties
-        self.report({'INFO'}, f"Export object")
+        root_obj, err = self.get_selected_object()
+        if err:
+            return {'FINISHED'}
+
+        self.unreal_export(root_obj)
+
+        # Re-select the root object again for a consistent user experience.
+        bpy.ops.object.select_all(action='DESELECT')
+        root_obj.select_set(True)
+
         return {'FINISHED'}
 
 
