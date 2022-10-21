@@ -2,6 +2,7 @@ import pathlib
 import random
 import subprocess
 from pathlib import Path
+from typing import List
 
 import bpy
 import bpy_types
@@ -45,6 +46,33 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         obj.data.materials.clear()
         obj.data.materials.append(material)
 
+    def merge_obj_files(self, prefix: str, out_files: List[Path]) -> Path:
+        data = ""
+        vert_ofs = 0
+
+        # Concatenate all OBJ files and assign each mesh a unique name.
+        for i, fname in enumerate(out_files):
+            data += f"o {prefix}{i}\n"
+
+            vert_cnt = 0
+            for line in fname.read_text().splitlines():
+                if line.startswith("v "):
+                    vert_cnt += 1
+                    data += line + "\n"
+                elif line.startswith("f "):
+                    el = line.split()
+                    vert_idx = [int(_) for _ in el[1:]]
+                    vert_idx = [str(_ + vert_ofs) for _ in vert_idx]
+                    data += "f " + str.join(" ", vert_idx) + "\n"
+                else:
+                    self.report({'ERROR'}, f"Unknown OBJ line entry <{line}>")
+                    assert False
+            vert_ofs += vert_cnt
+
+        out = Path("/tmp/foo/merged.obj")
+        out.write_text(data)
+        return out
+
     def execute(self, context):
         # Abort if we are not in OBJECT mode.
         if bpy.context.object.mode != 'OBJECT':
@@ -57,8 +85,8 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         if len(selected) != 1:
             self.report({'INFO'}, "Must have exactly one object selected")
             return
-        orig_name = selected[0].name
-        self.report({'INFO'}, f"Computing Collision Meshes for <{orig_name}>")
+        obj_name = selected[0].name
+        self.report({'INFO'}, f"Computing Collision Meshes for <{obj_name}>")
 
         # Save selected object as an .obj file to a temporary location.
         fname = self.export_object()
@@ -73,8 +101,16 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
         out_files = list(fname.parent.glob(pattern))
         self.report({"INFO"}, f"Produced {len(out_files)} Convex Hulls")
 
-        # Remove all stale collision shapes for the current object.
-        self.remove_stale_hulls(orig_name)
+        self.remove_stale_hulls(obj_name)
+
+        hull_prefix = "_tmphull_"
+        merged_obj_file = self.merge_obj_files(hull_prefix, out_files)
+        bpy.ops.import_scene.obj(filepath=str(merged_obj_file), filter_glob='*.obj')
+        del merged_obj_file
+        del hull_prefix
+
+        return {'FINISHED'}
+
 
         collection_name = "vhacd"
         vhacd_collection = self.make_collection(collection_name)
@@ -96,7 +132,7 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
             suffix = stem_name.partition("src")[2]  # src012 -> 012
 
             # Rename the object to match Unreal's FBX convention for collision shapes.
-            obj.name = f"UCX_{orig_name}_{suffix}"
+            obj.name = f"UCX_{obj_name}_{suffix}"
 
             # Unlink the current object from all its collections.
             for coll in obj.users_collection:
@@ -111,7 +147,7 @@ class ConvexDecompositionVHACD(bpy.types.Operator):
 
         # Re-select the original object again for a consistent user experience.
         bpy.ops.object.select_all(action='DESELECT')
-        bpy.data.objects[orig_name].select_set(True)
+        bpy.data.objects[obj_name].select_set(True)
 
         return {'FINISHED'}
 
