@@ -1,6 +1,7 @@
 import pathlib
 import random
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import List, Tuple
 
@@ -138,22 +139,6 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             bpy.context.scene.collection.children.link(collection)
         return collection
 
-    def export_mesh_for_solver(self, obj: bpy_types.Object) -> Path:
-        with SelectionGuard(clear=True):
-            obj.select_set(True)
-            fname = Path("/tmp/foo/src.obj")
-            pathlib.Path.mkdir(fname.parent, exist_ok=True)
-            fname.unlink(missing_ok=True)
-
-            bpy.ops.export_scene.obj(
-                filepath=str(fname),
-                check_existing=False,
-                use_selection=True,
-                use_materials=False,
-            )
-
-        return fname
-
     def randomise_colour(self, obj: bpy_types.Object) -> None:
         red, green, blue = [random.random() for _ in range(3)]
         alpha = 1.0
@@ -162,26 +147,39 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         obj.data.materials.clear()
         obj.data.materials.append(material)
 
-    def run_vhacd(self, obj_file_path: Path):
+    def export_mesh_for_solver(self, obj: bpy_types.Object, path: Path) -> Path:
+        with SelectionGuard(clear=True):
+            obj.select_set(True)
+
+            fname = path / "src.obj"
+            bpy.ops.export_scene.obj(
+                filepath=str(fname),
+                check_existing=False,
+                use_selection=True,
+                use_materials=False,
+            )
+        return fname
+
+    def run_vhacd(self, obj_file: Path):
         # Call VHACD to do the convex decomposition.
         args = [
-            "vhacd", str(obj_file_path), "-o", "obj"
+            "vhacd", str(obj_file), "-o", "obj"
         ]
-        subprocess.run(args, cwd=obj_file_path.parent)
+        subprocess.run(args, cwd=obj_file.parent)
 
-        fout = obj_file_path.parent / "decomp.obj"
+        fout = obj_file.parent / "decomp.obj"
         return fout
 
-    def run_coacd(self, obj_file_path: Path) -> Path:
+    def run_coacd(self, obj_file: Path) -> Path:
         # Call CoACD to do the convex decomposition.
-        result_file = obj_file_path.parent / "hulls.obj"
+        result_file = obj_file.parent / "hulls.obj"
         args = [
-            "coacd", "-i", str(obj_file_path),
+            "coacd", "-i", str(obj_file),
             "-o", str(result_file),
             "-np", "-mi", "400", "-md", "5",
             "-mn", "40", "-t", "0.05",
         ]
-        subprocess.run(args, cwd=obj_file_path.parent)
+        subprocess.run(args, cwd=obj_file.parent)
         return result_file
 
     def import_solver_results(self, fname: Path, hull_prefix: str):
@@ -216,10 +214,13 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
 
         # Save the selected root object as a temporary .obj file and use at
         # as input for the solver.
-        tmp_obj_path = self.export_mesh_for_solver(root_obj)
-        result_fname = self.run_vhacd(tmp_obj_path)
-        self.import_solver_results(result_fname, tmp_obj_prefix)
-        del tmp_obj_path
+        tmp_path = Path(tempfile.mkdtemp(prefix="devcomp-"))
+        print(f"Created temporary directory for solvers: {tmp_path}")
+
+        obj_path = self.export_mesh_for_solver(root_obj, tmp_path)
+        hull_path = self.run_vhacd(obj_path)
+        self.import_solver_results(hull_path, tmp_obj_prefix)
+        del obj_path, hull_path
 
         # Clean up the object names in Blender after the import.
         hull_objs = self.rename_hulls(tmp_obj_prefix, root_obj.name)
