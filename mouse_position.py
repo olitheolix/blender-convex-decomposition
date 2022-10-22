@@ -24,12 +24,15 @@ class ConvexDecompositionBaseOperator(bpy.types.Operator):
     bl_idname = 'opr.convex_decomposition_base'
     bl_label = 'Convex Decomposition Base Class'
 
-    def remove_stale_hulls(self, name: str) -> None:
+    def remove_stale_hulls(self, root_obj: bpy_types.Object) -> None:
         bpy.ops.object.select_all(action='DESELECT')
         for obj in bpy.data.objects:
-            if obj.name.startswith(f"UCX_{name}_"):
+            if obj.name.startswith(f"UCX_{root_obj.name}_"):
                 obj.select_set(True)
         bpy.ops.object.delete()
+
+        # Re-select the root object.
+        root_obj.select_set(True)
 
     def rename_hulls(self, hull_prefix: str, obj_name: str) -> List[bpy_types.Object]:
         objs = [_ for _ in bpy.data.objects if _.name.startswith(hull_prefix)]
@@ -64,7 +67,7 @@ class ConvexDecompositionClearOperator(ConvexDecompositionBaseOperator):
         if err:
             return {'FINISHED'}
 
-        self.remove_stale_hulls(root_obj.name)
+        self.remove_stale_hulls(root_obj)
 
         # Re-select the root object again for a consistent user experience.
         bpy.ops.object.select_all(action='DESELECT')
@@ -128,11 +131,18 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         return collection
 
     def save_temporary_obj(self) -> Path:
-        fpath = Path("/tmp/foo")
-        pathlib.Path.mkdir(fpath, exist_ok=True)
-        fname = fpath / "src.obj"
-        bpy.ops.export_scene.obj(filepath=str(fname), check_existing=False,
-                                 use_selection=True, use_materials=False)
+        fname = Path("/tmp/foo/src.obj")
+        pathlib.Path.mkdir(fname.parent, exist_ok=True)
+        fname.unlink(missing_ok=True)
+
+        _, err = self.get_selected_object()
+        assert not err
+        bpy.ops.export_scene.obj(
+            filepath=str(fname),
+            check_existing=False,
+            use_selection=True,
+            use_materials=False,
+        )
         return fname
 
     def randomise_colour(self, obj: bpy_types.Object) -> None:
@@ -218,7 +228,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         if err:
             return {'FINISHED'}
 
-        self.remove_stale_hulls(root_obj.name)
+        self.remove_stale_hulls(root_obj)
 
         self.report({'INFO'}, f"Computing collision meshes for <{root_obj.name}>")
 
