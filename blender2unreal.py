@@ -163,7 +163,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
     def run_vhacd(self, obj_file: Path):
         # Call VHACD to do the convex decomposition.
         args = [
-            "vhacd", str(obj_file), "-o", "obj"
+            "vhacd", str(obj_file),
         ]
         subprocess.run(args, cwd=obj_file.parent)
 
