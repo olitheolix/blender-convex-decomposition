@@ -191,7 +191,10 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
 
     def run_vhacd(self, obj_file_path: Path, hull_prefix: str):
         # Call VHACD to do the convex decomposition.
-        subprocess.run(["vhacd", str(obj_file_path), "-o", "obj"])
+        args = [
+            "vhacd", str(obj_file_path), "-o", "obj"
+        ]
+        subprocess.run(args, cwd=obj_file_path.parent)
 
         # Delete the original object from the temporary location and fetch the
         # list of all created collision shapes.
