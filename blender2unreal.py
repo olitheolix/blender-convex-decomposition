@@ -201,14 +201,14 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             )
 
     def execute(self, context):
+        # Convenience.
+        props = context.scene.ConvDecompProperties
+
         # User must have exactly one object selected in OBJECT mode.
         root_obj, err = self.get_selected_object()
         if err:
             return {'FINISHED'}
         self.report({'INFO'}, f"Computing collision meshes for <{root_obj.name}>")
-
-        collection_name = "convex hulls"
-        tmp_obj_prefix = "_tmphull_"
 
         self.remove_stale_hulls(root_obj)
 
@@ -219,15 +219,15 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
 
         obj_path = self.export_mesh_for_solver(root_obj, tmp_path)
         hull_path = self.run_vhacd(obj_path)
-        self.import_solver_results(hull_path, tmp_obj_prefix)
+        self.import_solver_results(hull_path, props.tmp_hull_prefix)
         del obj_path, hull_path
 
         # Clean up the object names in Blender after the import.
-        hull_objs = self.rename_hulls(tmp_obj_prefix, root_obj.name)
+        hull_objs = self.rename_hulls(props.tmp_hull_prefix, root_obj.name)
 
         # Parent the hulls to the root object, randomise their colours and place
         # them into a dedicated Blender collection.
-        hull_collection = self.upsert_collection(collection_name)
+        hull_collection = self.upsert_collection(props.hull_collection_name)
         for obj in hull_objs:
             # Unlink the current object from all its collections.
             for coll in obj.users_collection:
@@ -300,6 +300,17 @@ class ConvexDecompositionProperties(bpy.types.PropertyGroup):
         description="Shared Parameter",
         default=3.0,
     )
+    tmp_hull_prefix: bpy.props.StringProperty(  # type: ignore
+        name="Hull Prefix",
+        description="Name prefix for the temporary hull names created by the solvers.",
+        default="_tmphull_",
+    )
+    hull_collection_name: bpy.props.StringProperty(  # type: ignore
+        name="Hull Collection",
+        description="The collection to hold all the convex hulls.",
+        default="convex hulls",
+    )
+
     solver : bpy.props.EnumProperty(                    # type: ignore
         name="Solver",
         description="Select Convex Decomposition Solver",
