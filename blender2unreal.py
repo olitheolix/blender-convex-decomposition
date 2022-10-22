@@ -160,25 +160,50 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             )
         return fname
 
-    def run_vhacd(self, obj_file: Path):
+    def run_vhacd(self, obj_file: Path, props: bpy.types.PropertyGroup):
         # Call VHACD to do the convex decomposition.
         args = [
             "vhacd", str(obj_file),
+
+            "-r", str(props.i_voxel_resolution),
+            "-d", str(props.i_max_recursion_depth),
+            "-v", str(props.i_max_hull_vert_count),
+            "-l", str(props.i_min_edge_length),
+
+            "-e", str(props.f_volume_error_percent),
+
+            "-s", "true" if props.b_shrinkwrap else "false",
+            "-p", "true" if props.b_split_location else "false",
+            "-a", "true",       # Always run asynchronously.
+            "-g", "true",       # Logging
+
+            "-f", str(props.e_fill_mode),
         ]
         subprocess.run(args, cwd=obj_file.parent)
 
         fout = obj_file.parent / "decomp.obj"
         return fout
 
-    def run_coacd(self, obj_file: Path) -> Path:
+    def run_coacd(self, obj_file: Path, props: bpy.types.PropertyGroup) -> Path:
         # Call CoACD to do the convex decomposition.
         result_file = obj_file.parent / "hulls.obj"
         args = [
-            "coacd", "-i", str(obj_file),
-            "-o", str(result_file),
-            "-np", "-mi", "400", "-md", "5",
-            "-mn", "40", "-t", "0.05",
+            "coacd", "--input", str(obj_file),
+            "--output", str(result_file),
+
+            "--threshold", str(props.f_threshold),
+            "-k", str(props.f_k),
+
+            "--mcts-iteration", str(props.i_mcts_iterations),
+            "--mcts-depth", str(props.i_mcts_depth),
+            "--mcts-node", str(props.i_mcts_node),
+            "--prep-resolution", str(props.i_prep_resolution),
+            "--resolution", str(props.i_resolution),
         ]
+        args.append("--pca") if props.b_pca else None
+        args.append("--no-prerpocess") if props.b_no_preprocess else None
+        args.append("--no-merge") if props.b_disable_merge else None
+
         subprocess.run(args, cwd=obj_file.parent)
         return result_file
 
@@ -218,7 +243,16 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         print(f"Created temporary directory for solvers: {tmp_path}")
 
         obj_path = self.export_mesh_for_solver(root_obj, tmp_path)
-        hull_path = self.run_vhacd(obj_path)
+        if props.solver == "VHACD":
+            hull_path = self.run_vhacd(
+                obj_path,
+                context.scene.ConvDecompPropertiesVHACD,
+            )
+        else:
+            hull_path = self.run_coacd(
+                obj_path,
+                context.scene.ConvDecompPropertiesCoACD,
+            )
         self.import_solver_results(hull_path, props.tmp_hull_prefix)
         del obj_path, hull_path
 
@@ -260,9 +294,9 @@ class ConvexDecompositionPanel(bpy.types.Panel):
 
         layout.prop(props, 'solver')
         if props.solver == "VHACD":
-            prefix = "v_"
+            solver_props = context.scene.ConvDecompPropertiesVHACD
         elif props.solver == "CoACD":
-            prefix = "c_"
+            solver_props = context.scene.ConvDecompPropertiesCoACD
         else:
             self.report({'ERROR'}, "Unknown Solver <{props.solver}>")
             return
@@ -270,36 +304,163 @@ class ConvexDecompositionPanel(bpy.types.Panel):
         # Display "Run" button.
         layout.row().operator('opr.convex_decomposition_run', text="Run")
 
-        # Display Clear and Export buttons.
+        # Display <Clear> and <Export> buttons.
         row = layout.row()
         row.operator('opr.convex_decomposition_clear', text="Clear")
         row.operator('opr.convex_decomposition_unreal_export', text="Export")
 
-        # Shared parameters.
-        layout.row().prop(props, "both")
-
         # Solver Specific parameters.
-        solver_specific = [_ for _ in props.__annotations__ if _.startswith(prefix)]
+        layout.separator()
+        box = layout.box()
+        solver_specific = [_ for _ in solver_props.__annotations__]
         for name in solver_specific:
-            layout.row().prop(props, name)
+            box.row().prop(solver_props, name)
+
+
+class ConvexDecompositionPropertiesVHACD(bpy.types.PropertyGroup):
+    i_voxel_resolution: bpy.props.IntProperty(  # type: ignore
+        name="Voxel Resolution",
+        description="Total number of voxels to use.",
+        default=100_000,
+        min=1,
+        subtype='UNSIGNED'
+    )
+    f_volume_error_percent: bpy.props.FloatProperty(  # type: ignore
+        name="Volume Error (%)",
+        description="Volume error allowed as a percentage.",
+        default=10,
+        min=0.001,
+        max=10,
+        subtype='UNSIGNED'
+    )
+    i_max_recursion_depth: bpy.props.IntProperty(  # type: ignore
+        name="Max Recursion Depth",
+        description="Maximum recursion depth.",
+        default=10,
+        min=1,
+        subtype='UNSIGNED'
+    )
+    i_max_hull_vert_count: bpy.props.IntProperty(  # type: ignore
+        name="Max Hull Vert Count",
+        description="Maximum number of vertices in the output convex hull.",
+        default=64,
+        min=1,
+        subtype='UNSIGNED'
+    )
+    i_min_edge_length: bpy.props.IntProperty(  # type: ignore
+        name="Min Edge Length",
+        description="Minimum size of a voxel edge.",
+        default=2,
+        min=1,
+        subtype='UNSIGNED'
+    )
+    b_shrinkwrap: bpy.props.BoolProperty(  # type: ignore
+        name="Shrink Wrap",
+        description="Whether or not to shrinkwrap output to source mesh.",
+        default=True,
+    )
+    b_split_location: bpy.props.BoolProperty(  # type: ignore
+        name="Optimal Split Location",
+        description=(
+            "If false, splits hulls in the middle. "
+            "If true, tries to find optimal split plane location."
+        ),
+        default=False,
+    )
+    e_fill_mode: bpy.props.EnumProperty(  # type: ignore
+        name="Fill Mode",
+        description="Select Convex Decomposition Solver.",
+        items={
+            ('flood', 'flood', 'Use Flood Fill'),
+            ('surface', 'surface', 'Use Surface Method'),
+            ('raycast', 'raycast', 'Use Raycast Method'),
+        },
+        default='flood',
+    )
+
+
+class ConvexDecompositionPropertiesCoACD(bpy.types.PropertyGroup):
+    f_threshold: bpy.props.FloatProperty(  # type: ignore
+        name="Concavity Threshold",
+        description=(
+            "This is primary parameter to control the quality of the decomposition."
+        ),
+        default=0.05,
+        min=0.01,
+        max=1,
+        subtype='UNSIGNED'
+    )
+    i_mcts_iterations: bpy.props.IntProperty(  # type: ignore
+        name="MCTS Iterations",
+        description="Number of search iterations in MCTS.",
+        default=100,
+        min=60,
+        max=2_000,
+        subtype='UNSIGNED'
+    )
+    i_mcts_depth: bpy.props.IntProperty(  # type: ignore
+        name="MCTS Depth",
+        description="Max search depth in MCTS.",
+        default=3,
+        min=2,
+        max=7,
+        subtype='UNSIGNED'
+    )
+    i_mcts_node: bpy.props.IntProperty(  # type: ignore
+        name="MCTS Node",
+        description="Max number of child nodes in MCTS.",
+        default=20,
+        min=10,
+        max=40,
+        subtype='UNSIGNED'
+    )
+    i_prep_resolution: bpy.props.IntProperty(  # type: ignore
+        name="Manifold Pre-Processing Resolution",
+        description="Resolution for manifold pre-processing.",
+        default=10_000,
+        min=1_000,
+        max=100_000,
+        subtype='UNSIGNED'
+    )
+    i_resolution: bpy.props.IntProperty(  # type: ignore
+        name="Sampling Resolution",
+        description="Sampling resolution for Hausdorff distance.",
+        default=2_000,
+        min=1_000,
+        max=10_000,
+        subtype='UNSIGNED'
+    )
+
+    f_k: bpy.props.FloatProperty(  # type: ignore
+        name="K",
+        description="Value of K for R_v calculation.",
+        default=0.3,
+        min=0,
+        max=1,
+        subtype='UNSIGNED'
+    )
+
+    b_no_preprocess: bpy.props.BoolProperty(  # type: ignore
+        name="Watertight Mesh",
+        description=(
+            "Enable this if your mesh is already watertight."
+            "It will speed up the computation and reduce artefacts."
+        ),
+        default=True,
+    )
+    b_disable_merge: bpy.props.BoolProperty(  # type: ignore
+        name="Merge Post-Processing",
+        description="",
+        default=False,
+    )
+    b_pca: bpy.props.BoolProperty(  # type: ignore
+        name="PCA Pre-Processing",
+        description="",
+        default=False,
+    )
 
 
 class ConvexDecompositionProperties(bpy.types.PropertyGroup):
-    v_param: bpy.props.FloatProperty(  # type: ignore
-        name="v_Param",
-        description="VHACD Parameter",
-        default=1.0,
-    )
-    c_param: bpy.props.FloatProperty(  # type: ignore
-        name="c_Param",
-        description="CoACD Parameter",
-        default=2.0,
-    )
-    both: bpy.props.FloatProperty(  # type: ignore
-        name="Shared parameter",
-        description="Shared Parameter",
-        default=3.0,
-    )
     tmp_hull_prefix: bpy.props.StringProperty(  # type: ignore
         name="Hull Prefix",
         description="Name prefix for the temporary hull names created by the solvers.",
@@ -310,10 +471,9 @@ class ConvexDecompositionProperties(bpy.types.PropertyGroup):
         description="The collection to hold all the convex hulls.",
         default="convex hulls",
     )
-
-    solver : bpy.props.EnumProperty(                    # type: ignore
+    solver: bpy.props.EnumProperty(  # type: ignore
         name="Solver",
-        description="Select Convex Decomposition Solver",
+        description="Supported Convex Decomposition Solvers.",
         items={
             ('VHACD', 'VHACD', 'Use VHACD'),
             ('CoACD', 'CoACD', 'Use CoACD'),
@@ -322,9 +482,12 @@ class ConvexDecompositionProperties(bpy.types.PropertyGroup):
     )
 
 
+
 CLASSES = [
     ConvexDecompositionPanel,
     ConvexDecompositionProperties,
+    ConvexDecompositionPropertiesVHACD,
+    ConvexDecompositionPropertiesCoACD,
     ConvexDecompositionRunOperator,
     ConvexDecompositionClearOperator,
     ConvexDecompositionUnrealExportOperator,
@@ -335,11 +498,18 @@ def register():
         bpy.utils.register_class(cls)
 
     bpy.types.Scene.ConvDecompProperties = bpy.props.PointerProperty(type=ConvexDecompositionProperties)
+    bpy.types.Scene.ConvDecompPropertiesVHACD = bpy.props.PointerProperty(type=ConvexDecompositionPropertiesVHACD)
+    bpy.types.Scene.ConvDecompPropertiesCoACD = bpy.props.PointerProperty(type=ConvexDecompositionPropertiesCoACD)
+
 
 def unregister():
     for cls in CLASSES:
         bpy.utils.unregister_class(cls)
+
     del bpy.types.Scene.ConvDecompProperties
+    del bpy.types.Scene.ConvDecompPropertiesVHACD
+    del bpy.types.Scene.ConvDecompPropertiesCoACD
+
 
 
 register()
