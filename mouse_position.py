@@ -162,62 +162,45 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         obj.data.materials.clear()
         obj.data.materials.append(material)
 
-    def run_vhacd(self, obj_file_path: Path, hull_prefix: str):
+    def run_vhacd(self, obj_file_path: Path):
         # Call VHACD to do the convex decomposition.
         args = [
             "vhacd", str(obj_file_path), "-o", "obj"
         ]
         subprocess.run(args, cwd=obj_file_path.parent)
 
-        # Delete the original object from the temporary location and fetch the
-        # list of all created collision shapes.
-        obj_file_path.unlink()
-        pattern = str(obj_file_path.stem) + "*.obj"
-        out_files = list(obj_file_path.parent.glob(pattern))
-        self.report({"INFO"}, f"Produced {len(out_files)} Convex Hulls")
-
-        # merged_obj_file = self.merge_obj_files(hull_prefix, out_files)
-
         fout = obj_file_path.parent / "decomp.obj"
+        return fout
 
-        # Replace all object names in the OBJ file that CoACD produced.
-        data = ""
-        lines = fout.read_text().splitlines()
-        for i, line in enumerate(lines):
-            if line.startswith("o "):
-                data += f"o {hull_prefix}{i}\n"
-            else:
-                data += line + "\n"
-        fout.write_text(data)
-
-        with SelectionGuard():
-            bpy.ops.import_scene.obj(filepath=str(fout), filter_glob='*.obj')
-
-    def run_coacd(self, obj_file_path: Path, hull_prefix: str):
+    def run_coacd(self, obj_file_path: Path) -> Path:
         # Call CoACD to do the convex decomposition.
-        fout = obj_file_path.parent / "hulls.obj"
+        result_file = obj_file_path.parent / "hulls.obj"
         args = [
             "coacd", "-i", str(obj_file_path),
-            "-o", str(fout),
+            "-o", str(result_file),
             "-np", "-mi", "400", "-md", "5",
             "-mn", "40", "-t", "0.05",
         ]
-        print(args)
-        subprocess.run(args)
+        subprocess.run(args, cwd=obj_file_path.parent)
+        return result_file
 
+    def import_solver_results(self, fname: Path, hull_prefix: str):
         # Replace all object names in the OBJ file that CoACD produced.
         data = ""
-        lines = fout.read_text().splitlines()
+        lines = fname.read_text().splitlines()
         for i, line in enumerate(lines):
             if line.startswith("o "):
                 data += f"o {hull_prefix}{i}\n"
             else:
                 data += line + "\n"
-        fout.write_text(data)
+        fname.write_text(data)
 
         # Import the hulls back into Blender.
         with SelectionGuard():
-            bpy.ops.import_scene.obj(filepath=str(fout), filter_glob='*.obj')
+            bpy.ops.import_scene.obj(
+                filepath=str(fname),
+                filter_glob='*.obj',
+            )
 
     def execute(self, context):
         # User must have exactly one object selected in OBJECT mode.
@@ -234,7 +217,8 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         # Save the selected root object as a temporary .obj file and use at
         # as input for the solver.
         tmp_obj_path = self.save_temporary_obj(root_obj)
-        self.run_vhacd(tmp_obj_path, tmp_obj_prefix)
+        result_fname = self.run_vhacd(tmp_obj_path)
+        self.import_solver_results(result_fname, tmp_obj_prefix)
         del tmp_obj_path
 
         # Clean up the object names in Blender after the import.
