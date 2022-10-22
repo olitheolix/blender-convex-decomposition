@@ -18,32 +18,32 @@ bl_info = {
 }
 
 
+class SelectionGuard():
+    """Ensure the same objects are selected at the end."""
+    def __init__(self, clear: bool = False):
+        self.clear = clear
+
+    def __enter__(self, clear=False):
+        self.selected = bpy.context.selected_objects
+        if self.clear:
+            bpy.ops.object.select_all(action='DESELECT')
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in self.selected:
+            obj.select_set(True)
+
+
 class ConvexDecompositionBaseOperator(bpy.types.Operator):
     """Base class with common utility methods"""
 
     bl_idname = 'opr.convex_decomposition_base'
     bl_label = 'Convex Decomposition Base Class'
 
-    def remove_stale_hulls(self, root_obj: bpy_types.Object) -> None:
-        bpy.ops.object.select_all(action='DESELECT')
-        for obj in bpy.data.objects:
-            if obj.name.startswith(f"UCX_{root_obj.name}_"):
-                obj.select_set(True)
-        bpy.ops.object.delete()
-
-        # Re-select the root object.
-        root_obj.select_set(True)
-
-    def rename_hulls(self, hull_prefix: str, obj_name: str) -> List[bpy_types.Object]:
-        objs = [_ for _ in bpy.data.objects if _.name.startswith(hull_prefix)]
-        for i, obj in enumerate(objs):
-            name = f"UCX_{obj_name}_{i}"
-            obj.name = name
-        return objs
-
     def get_selected_object(self) -> Tuple[bpy_types.Object, bool]:
         # User must be in OBJECT mode.
-        if bpy.context.object.mode != 'OBJECT':
+        if bpy.context.mode != 'OBJECT':
             self.report({'ERROR'}, "Must be in OBJECT mode")
             return None, True
 
@@ -55,6 +55,20 @@ class ConvexDecompositionBaseOperator(bpy.types.Operator):
 
         return selected[0], False
 
+    def remove_stale_hulls(self, root_obj: bpy_types.Object) -> None:
+        with SelectionGuard(clear=True):
+            for obj in bpy.data.objects:
+                if obj.name.startswith(f"UCX_{root_obj.name}_"):
+                    obj.select_set(True)
+            bpy.ops.object.delete()
+
+    def rename_hulls(self, hull_prefix: str, obj_name: str) -> List[bpy_types.Object]:
+        objs = [_ for _ in bpy.data.objects if _.name.startswith(hull_prefix)]
+        for i, obj in enumerate(objs):
+            name = f"UCX_{obj_name}_{i}"
+            obj.name = name
+        return objs
+
 
 class ConvexDecompositionClearOperator(ConvexDecompositionBaseOperator):
     """Clear all collision shapes for selected object."""
@@ -63,17 +77,14 @@ class ConvexDecompositionClearOperator(ConvexDecompositionBaseOperator):
     bl_label = 'Clear Collision Shapes For Selected Object'
 
     def execute(self, context):
+        # User must have exactly one object selected in OBJECT mode.
         root_obj, err = self.get_selected_object()
         if err:
             return {'FINISHED'}
 
         self.remove_stale_hulls(root_obj)
 
-        # Re-select the root object again for a consistent user experience.
-        bpy.ops.object.select_all(action='DESELECT')
-        root_obj.select_set(True)
-
-        self.report({'INFO'}, f"Removed all collision shapes from <{root_obj.name}>")
+        self.report({'INFO'}, f"Removed all collision shapes for <{root_obj.name}>")
         return {'FINISHED'}
 
 
@@ -88,31 +99,28 @@ class ConvexDecompositionUnrealExportOperator(ConvexDecompositionBaseOperator):
         fname = root_path / f"{obj.name}.fbx"
 
         # Select all the children of this object.
-        for child in obj.children:
-            if child.name.startswith("UCX_"):
-                child.select_set(True)
+        with SelectionGuard():
+            for child in obj.children:
+                if child.name.startswith("UCX_"):
+                    child.select_set(True)
 
-        bpy.ops.export_scene.fbx(
-            filepath=str(fname),
-            check_existing=True,
-            use_selection=True,
-            mesh_smooth_type="FACE",
-            axis_forward='-Z',
-            axis_up='Y',
-        )
+            bpy.ops.export_scene.fbx(
+                filepath=str(fname),
+                check_existing=True,
+                use_selection=True,
+                mesh_smooth_type="FACE",
+                axis_forward='-Z',
+                axis_up='Y',
+            )
         self.report({'INFO'}, f"Exported object to <{fname}>")
 
     def execute(self, context):
+        # User must have exactly one object selected in OBJECT mode.
         root_obj, err = self.get_selected_object()
         if err:
             return {'FINISHED'}
 
         self.unreal_export(root_obj)
-
-        # Re-select the root object again for a consistent user experience.
-        bpy.ops.object.select_all(action='DESELECT')
-        root_obj.select_set(True)
-
         return {'FINISHED'}
 
 
@@ -130,19 +138,20 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             bpy.context.scene.collection.children.link(collection)
         return collection
 
-    def save_temporary_obj(self) -> Path:
-        fname = Path("/tmp/foo/src.obj")
-        pathlib.Path.mkdir(fname.parent, exist_ok=True)
-        fname.unlink(missing_ok=True)
+    def save_temporary_obj(self, obj: bpy_types.Object) -> Path:
+        with SelectionGuard(clear=True):
+            obj.select_set(True)
+            fname = Path("/tmp/foo/src.obj")
+            pathlib.Path.mkdir(fname.parent, exist_ok=True)
+            fname.unlink(missing_ok=True)
 
-        _, err = self.get_selected_object()
-        assert not err
-        bpy.ops.export_scene.obj(
-            filepath=str(fname),
-            check_existing=False,
-            use_selection=True,
-            use_materials=False,
-        )
+            bpy.ops.export_scene.obj(
+                filepath=str(fname),
+                check_existing=False,
+                use_selection=True,
+                use_materials=False,
+            )
+
         return fname
 
     def randomise_colour(self, obj: bpy_types.Object) -> None:
@@ -192,7 +201,9 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         self.report({"INFO"}, f"Produced {len(out_files)} Convex Hulls")
 
         merged_obj_file = self.merge_obj_files(hull_prefix, out_files)
-        bpy.ops.import_scene.obj(filepath=str(merged_obj_file), filter_glob='*.obj')
+
+        with SelectionGuard():
+            bpy.ops.import_scene.obj(filepath=str(merged_obj_file), filter_glob='*.obj')
         del merged_obj_file
 
     def run_coacd(self, obj_file_path: Path, hull_prefix: str):
@@ -218,32 +229,32 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         fout.write_text(data)
 
         # Import the hulls back into Blender.
-        bpy.ops.import_scene.obj(filepath=str(fout), filter_glob='*.obj')
+        with SelectionGuard():
+            bpy.ops.import_scene.obj(filepath=str(fout), filter_glob='*.obj')
 
     def execute(self, context):
-        collection_name = "convex hulls"
-        tmp_obj_prefix = "_tmphull_"
-
+        # User must have exactly one object selected in OBJECT mode.
         root_obj, err = self.get_selected_object()
         if err:
             return {'FINISHED'}
+        self.report({'INFO'}, f"Computing collision meshes for <{root_obj.name}>")
+
+        collection_name = "convex hulls"
+        tmp_obj_prefix = "_tmphull_"
 
         self.remove_stale_hulls(root_obj)
 
-        self.report({'INFO'}, f"Computing collision meshes for <{root_obj.name}>")
-
-        # Save the selected root object as a temporary .obj file.
-        tmp_obj_path = self.save_temporary_obj()
-
-        # Run the convex decomposition.
-        self.run_coacd(tmp_obj_path, tmp_obj_prefix)
+        # Save the selected root object as a temporary .obj file and use at
+        # as input for the solver.
+        tmp_obj_path = self.save_temporary_obj(root_obj)
+        self.run_vhacd(tmp_obj_path, tmp_obj_prefix)
         del tmp_obj_path
 
-        # Clean up the object names after the import.
+        # Clean up the object names in Blender after the import.
         hull_objs = self.rename_hulls(tmp_obj_prefix, root_obj.name)
 
-        # Parent the hulls to the root object, randomise their colour and place
-        # them into a dedicated collection.
+        # Parent the hulls to the root object, randomise their colours and place
+        # them into a dedicated Blender collection.
         hull_collection = self.upsert_collection(collection_name)
         for obj in hull_objs:
             # Unlink the current object from all its collections.
@@ -259,10 +270,6 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             # Parent the hull to the root object without changing the relative transform.
             obj.parent = root_obj
             obj.matrix_parent_inverse = root_obj.matrix_world.inverted()
-
-        # Re-select the root object again for a consistent user experience.
-        bpy.ops.object.select_all(action='DESELECT')
-        root_obj.select_set(True)
 
         return {'FINISHED'}
 
