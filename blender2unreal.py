@@ -138,7 +138,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             bpy.context.scene.collection.children.link(collection)
         return collection
 
-    def save_temporary_obj(self, obj: bpy_types.Object) -> Path:
+    def export_mesh_for_solver(self, obj: bpy_types.Object) -> Path:
         with SelectionGuard(clear=True):
             obj.select_set(True)
             fname = Path("/tmp/foo/src.obj")
@@ -216,7 +216,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
 
         # Save the selected root object as a temporary .obj file and use at
         # as input for the solver.
-        tmp_obj_path = self.save_temporary_obj(root_obj)
+        tmp_obj_path = self.export_mesh_for_solver(root_obj)
         result_fname = self.run_vhacd(tmp_obj_path)
         self.import_solver_results(result_fname, tmp_obj_prefix)
         del tmp_obj_path
