@@ -162,33 +162,6 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         obj.data.materials.clear()
         obj.data.materials.append(material)
 
-    def merge_obj_files(self, prefix: str, out_files: List[Path]) -> Path:
-        data = ""
-        vert_ofs = 0
-
-        # Concatenate all OBJ files and assign each mesh a unique name.
-        for i, fname in enumerate(out_files):
-            data += f"o {prefix}{i}\n"
-
-            vert_cnt = 0
-            for line in fname.read_text().splitlines():
-                if line.startswith("v "):
-                    vert_cnt += 1
-                    data += line + "\n"
-                elif line.startswith("f "):
-                    el = line.split()
-                    vert_idx = [int(_) for _ in el[1:]]
-                    vert_idx = [str(_ + vert_ofs) for _ in vert_idx]
-                    data += "f " + str.join(" ", vert_idx) + "\n"
-                else:
-                    self.report({'ERROR'}, f"Unknown OBJ line entry <{line}>")
-                    assert False
-            vert_ofs += vert_cnt
-
-        out = Path("/tmp/foo/merged.obj")
-        out.write_text(data)
-        return out
-
     def run_vhacd(self, obj_file_path: Path, hull_prefix: str):
         # Call VHACD to do the convex decomposition.
         args = [
@@ -203,11 +176,22 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         out_files = list(obj_file_path.parent.glob(pattern))
         self.report({"INFO"}, f"Produced {len(out_files)} Convex Hulls")
 
-        merged_obj_file = self.merge_obj_files(hull_prefix, out_files)
+        # merged_obj_file = self.merge_obj_files(hull_prefix, out_files)
+
+        fout = obj_file_path.parent / "decomp.obj"
+
+        # Replace all object names in the OBJ file that CoACD produced.
+        data = ""
+        lines = fout.read_text().splitlines()
+        for i, line in enumerate(lines):
+            if line.startswith("o "):
+                data += f"o {hull_prefix}{i}\n"
+            else:
+                data += line + "\n"
+        fout.write_text(data)
 
         with SelectionGuard():
-            bpy.ops.import_scene.obj(filepath=str(merged_obj_file), filter_glob='*.obj')
-        del merged_obj_file
+            bpy.ops.import_scene.obj(filepath=str(fout), filter_glob='*.obj')
 
     def run_coacd(self, obj_file_path: Path, hull_prefix: str):
         # Call CoACD to do the convex decomposition.
