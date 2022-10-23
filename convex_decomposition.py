@@ -9,12 +9,12 @@ import bpy  # type: ignore
 import bpy_types  # type: ignore
 
 bl_info = {
-    'name': 'Unreal Blender',
+    'name': 'Convex Decomposition',
     'blender': (3, 3, 0),
     'category': 'Object',
     'version': (0, 1, 0),
     'author': 'Oliver Nagy',
-    'description': 'Create collision shapes and export them to Unreal Engine',
+    'description': 'Create collision shapes and for FBX export to Unreal Engine',
     'warning': 'WIP',
 }
 
