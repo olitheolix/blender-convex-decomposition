@@ -1,16 +1,16 @@
 * blender2unreal
 
-** Todo [4/11]:
+** Todo [9/11]:
    - [X] Rename =mouse-pointer=
    - [X] Expose solver parameters
    - [X] Rename property group
    - [X] Fix the empty export problem
-   - [ ] Figure out the registration process
-   - [ ] Create plugin with global [[https://b3d.interplanety.org/en/add-on-preferences-panel/][preferences]]
-   - [ ] User should be able to select =vhacd= and =coacd= binaries in preferences.
+   - [X] Figure out the registration process
+   - [X] Create plugin with global [[https://b3d.interplanety.org/en/add-on-preferences-panel/][preferences]]
+   - [X] User should be able to select =vhacd= and =coacd= binaries in preferences.
    - [ ] Error checks when calling the solver with =subprocess.run=
-   - [ ] Gray out solvers in the UI that were not found.
-   - [ ] Rename addon and focus on Convex Decomposition because there already
+   - [X] Gray out solvers in the UI that were not found.
+   - [X] Rename addon and focus on Convex Decomposition because there already
          exists a Blender -> Unreal bridge.
    - [ ] Experiment with a modal operator
      - [ ] Run subprocess asynchronously.
