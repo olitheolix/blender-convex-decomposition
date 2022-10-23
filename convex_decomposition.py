@@ -10,7 +10,7 @@ import bpy_types  # type: ignore
 
 bl_info = {
     'name': 'Unreal Blender',
-    'blender': (3, 4, 0),
+    'blender': (3, 3, 0),
     'category': 'Object',
     'version': (0, 1, 0),
     'author': 'Oliver Nagy',
@@ -20,19 +20,17 @@ bl_info = {
 
 
 class ConvexDecompositionPreferences(bpy.types.AddonPreferences):
-    # this must match the add-on name, use '__package__'
-    # when defining this in a submodule of a python package.
     bl_idname = __name__
 
-    filepath: StringProperty(   # type: ignore
+    filepath: bpy.props.StringProperty(   # type: ignore
         name="Example File Path",
         subtype='FILE_PATH',
     )
-    number: IntProperty(        # type: ignore
+    number: bpy.props.IntProperty(        # type: ignore
         name="Example Number",
         default=4,
     )
-    boolean: BoolProperty(      # type: ignore
+    boolean: bpy.props.BoolProperty(      # type: ignore
         name="Example Boolean",
         default=False,
     )
@@ -535,7 +533,3 @@ def unregister():
     del bpy.types.Scene.ConvDecompProperties
     del bpy.types.Scene.ConvDecompPropertiesVHACD
     del bpy.types.Scene.ConvDecompPropertiesCoACD
-
-
-
-register()

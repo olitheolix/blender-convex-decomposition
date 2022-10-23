@@ -16,3 +16,12 @@
      - [ ] Run subprocess asynchronously.
      - [ ] Poll output and show in a window so the user can see the progress.
      - [ ] Add abort button.
+
+To get a good result for the bevel cage use these values:
+Concavity Threshold: 0.02
+MCTS Iterations: 200
+MCTS Depth: 5
+MCTS Node: 20
+Manifold Pre-Processing: 10,000
+Sampling Resolution: 8000
+K = 0.3
