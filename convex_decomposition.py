@@ -20,27 +20,21 @@ bl_info = {
 
 
 class ConvexDecompositionPreferences(bpy.types.AddonPreferences):
-    bl_idname = __name__
+    bl_idname = "convex_decomposition"
 
-    filepath: bpy.props.StringProperty(   # type: ignore
-        name="Example File Path",
+    vhacd_binary: bpy.props.StringProperty(  # type: ignore
+        name="V-HACD Binary",
         subtype='FILE_PATH',
     )
-    number: bpy.props.IntProperty(        # type: ignore
-        name="Example Number",
-        default=4,
-    )
-    boolean: bpy.props.BoolProperty(      # type: ignore
-        name="Example Boolean",
-        default=False,
+    coacd_binary: bpy.props.StringProperty(  # type: ignore
+        name="CoACD Binary",
+        subtype='FILE_PATH',
     )
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="This is a preferences view for our add-on")
-        layout.prop(self, "filepath")
-        layout.prop(self, "number")
-        layout.prop(self, "boolean")
+        layout.prop(self, "vhacd_binary")
+        layout.prop(self, "coacd_binary")
 
 
 class SelectionGuard():
@@ -153,6 +147,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
     """Use VHACD or CoACD to create a convex decomposition of objects."""
     bl_idname = 'opr.convex_decomposition_run'
     bl_label = 'Convex Decomposition Base Class'
+    bl_description = "Run Solver"
 
     def upsert_collection(self, collection_name: str) -> bpy_types.Collection:
         """ Upsert a dedicated outliner collection for the convex hulls."""
@@ -251,6 +246,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
 
     def execute(self, context):
         # Convenience.
+        prefs = context.preferences.addons["convex_decomposition"].preferences
         props = context.scene.ConvDecompProperties
 
         # User must have exactly one object selected in OBJECT mode.
@@ -314,19 +310,31 @@ class ConvexDecompositionPanel(bpy.types.Panel):
     def draw(self, context):
         # Convenience.
         props = context.scene.ConvDecompProperties
+        prefs = context.preferences.addons["convex_decomposition"].preferences
         layout = self.layout
 
+        print(prefs.vhacd_binary, type(prefs.vhacd_binary))
         layout.prop(props, 'solver')
         if props.solver == "VHACD":
+            binary = Path(prefs.vhacd_binary)
             solver_props = context.scene.ConvDecompPropertiesVHACD
         elif props.solver == "CoACD":
+            binary = Path(prefs.coacd_binary)
             solver_props = context.scene.ConvDecompPropertiesCoACD
         else:
             self.report({'ERROR'}, "Unknown Solver <{props.solver}>")
             return
 
+        # Determine if solver binary is available.
+        is_valid_solver = True if binary.name != "" and binary.exists() else False
+
         # Display "Run" button.
-        layout.row().operator('opr.convex_decomposition_run', text="Run")
+        row = layout.row()
+        if is_valid_solver:
+            row.operator('opr.convex_decomposition_run', text="Run")
+        else:
+            row.label(text='Set Binary in Preferences')
+        row.enabled = is_valid_solver
 
         # Display <Clear> and <Export> buttons.
         row = layout.row()
@@ -336,6 +344,7 @@ class ConvexDecompositionPanel(bpy.types.Panel):
         # Solver Specific parameters.
         layout.separator()
         box = layout.box()
+        box.enabled = is_valid_solver
         solver_specific = [_ for _ in solver_props.__annotations__]
         for name in solver_specific:
             box.row().prop(solver_props, name)
@@ -515,6 +524,7 @@ CLASSES = [
     ConvexDecompositionRunOperator,
     ConvexDecompositionClearOperator,
     ConvexDecompositionUnrealExportOperator,
+    ConvexDecompositionPreferences,
 ]
 
 def register():
@@ -533,3 +543,7 @@ def unregister():
     del bpy.types.Scene.ConvDecompProperties
     del bpy.types.Scene.ConvDecompPropertiesVHACD
     del bpy.types.Scene.ConvDecompPropertiesCoACD
+
+
+if __name__ == '__main__':
+    register()
