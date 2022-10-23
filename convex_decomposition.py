@@ -19,6 +19,32 @@ bl_info = {
 }
 
 
+class ConvexDecompositionPreferences(bpy.types.AddonPreferences):
+    # this must match the add-on name, use '__package__'
+    # when defining this in a submodule of a python package.
+    bl_idname = __name__
+
+    filepath: StringProperty(   # type: ignore
+        name="Example File Path",
+        subtype='FILE_PATH',
+    )
+    number: IntProperty(        # type: ignore
+        name="Example Number",
+        default=4,
+    )
+    boolean: BoolProperty(      # type: ignore
+        name="Example Boolean",
+        default=False,
+    )
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="This is a preferences view for our add-on")
+        layout.prop(self, "filepath")
+        layout.prop(self, "number")
+        layout.prop(self, "boolean")
+
+
 class SelectionGuard():
     """Ensure the same objects are selected at the end."""
     def __init__(self, clear: bool = False):
