@@ -179,10 +179,13 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             )
         return fname
 
-    def run_vhacd(self, obj_file: Path, props: bpy.types.PropertyGroup):
+    def run_vhacd(self, obj_file: Path,
+                  props: bpy.types.PropertyGroup,
+                  binary: Path):
         # Call VHACD to do the convex decomposition.
-        args = [
-            "vhacd", str(obj_file),
+        cmd = [
+            binary,
+            str(obj_file),
 
             "-r", str(props.i_voxel_resolution),
             "-d", str(props.i_max_recursion_depth),
@@ -198,16 +201,21 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
 
             "-f", str(props.e_fill_mode),
         ]
-        subprocess.run(args, cwd=obj_file.parent)
+
+        self.report({"INFO"}, f"Running command <{cmd}>")
+        subprocess.run(cmd, cwd=obj_file.parent)
 
         fout = obj_file.parent / "decomp.obj"
         return fout
 
-    def run_coacd(self, obj_file: Path, props: bpy.types.PropertyGroup) -> Path:
+    def run_coacd(self, obj_file: Path,
+                  props: bpy.types.PropertyGroup,
+                  binary: Path) -> Path:
         # Call CoACD to do the convex decomposition.
         result_file = obj_file.parent / "hulls.obj"
-        args = [
-            "coacd", "--input", str(obj_file),
+        cmd = [
+            binary,
+            "--input", str(obj_file),
             "--output", str(result_file),
 
             "--threshold", str(props.f_threshold),
@@ -219,11 +227,12 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             "--prep-resolution", str(props.i_prep_resolution),
             "--resolution", str(props.i_resolution),
         ]
-        args.append("--pca") if props.b_pca else None
-        args.append("--no-prerpocess") if props.b_no_preprocess else None
-        args.append("--no-merge") if props.b_disable_merge else None
+        cmd.append("--pca") if props.b_pca else None
+        cmd.append("--no-prerpocess") if props.b_no_preprocess else None
+        cmd.append("--no-merge") if props.b_disable_merge else None
 
-        subprocess.run(args, cwd=obj_file.parent)
+        self.report({"INFO"}, f"Running command <{cmd}>")
+        subprocess.run(cmd, cwd=obj_file.parent)
         return result_file
 
     def import_solver_results(self, fname: Path, hull_prefix: str):
@@ -260,18 +269,20 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         # Save the selected root object as a temporary .obj file and use at
         # as input for the solver.
         tmp_path = Path(tempfile.mkdtemp(prefix="devcomp-"))
-        print(f"Created temporary directory for solvers: {tmp_path}")
+        self.report({"INFO"}, f"Created temporary directory for solvers: {tmp_path}")
 
         obj_path = self.export_mesh_for_solver(root_obj, tmp_path)
         if props.solver == "VHACD":
             hull_path = self.run_vhacd(
                 obj_path,
                 context.scene.ConvDecompPropertiesVHACD,
+                Path(prefs.vhacd_binary),
             )
         else:
             hull_path = self.run_coacd(
                 obj_path,
                 context.scene.ConvDecompPropertiesCoACD,
+                Path(prefs.coacd_binary),
             )
         self.import_solver_results(hull_path, props.tmp_hull_prefix)
         del obj_path, hull_path
