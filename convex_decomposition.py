@@ -313,7 +313,6 @@ class ConvexDecompositionPanel(bpy.types.Panel):
         prefs = context.preferences.addons["convex_decomposition"].preferences
         layout = self.layout
 
-        print(prefs.vhacd_binary, type(prefs.vhacd_binary))
         layout.prop(props, 'solver')
         if props.solver == "VHACD":
             binary = Path(prefs.vhacd_binary)
