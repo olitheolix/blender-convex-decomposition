@@ -1,27 +1,35 @@
-* blender2unreal
+* Blender Plugin For Convex Decomposition
 
-** Todo [9/11]:
-   - [X] Rename =mouse-pointer=
-   - [X] Expose solver parameters
-   - [X] Rename property group
-   - [X] Fix the empty export problem
-   - [X] Figure out the registration process
-   - [X] Create plugin with global [[https://b3d.interplanety.org/en/add-on-preferences-panel/][preferences]]
-   - [X] User should be able to select =vhacd= and =coacd= binaries in preferences.
-   - [ ] Error checks when calling the solver with =subprocess.run=
-   - [X] Gray out solvers in the UI that were not found.
-   - [X] Rename addon and focus on Convex Decomposition because there already
-         exists a Blender -> Unreal bridge.
-   - [ ] Experiment with a modal operator
-     - [ ] Run subprocess asynchronously.
-     - [ ] Poll output and show in a window so the user can see the progress.
-     - [ ] Add abort button.
+This Blender addon makes [[https://github.com/kmammou/v-hacd][V-HACD]] and [[https://github.com/SarahWeiii/CoACD][CoACD]] available inside Blender.
 
-To get a good result for the bevel cage use these values:
-Concavity Threshold: 0.02
-MCTS Iterations: 200
-MCTS Depth: 5
-MCTS Node: 20
-Manifold Pre-Processing: 10,000
-Sampling Resolution: 8000
-K = 0.3
+It can also export a mesh and its collision shapes to Unreal Engine via FBX.
+
+| Original                    | V-HACD                | CoACD                 |
+| [[screenshots/root_object.jpg]] | [[screenshots/vhacd.jpg]] | [[screenshots/coacd.jpg]] |
+|                             | Time: 2s              | Time: 5min            |
+
+
+** Installation
+Grab (or build) the binaries for [[https://github.com/kmammou/v-hacd][V-HACD]] and/or [[https://github.com/SarahWeiii/CoACD][CoACD]] from their website.
+
+Install the [[convex_decomposition.py][convex_decomposition.py]] addon like you would any other Blender
+addon and specify the path to the V-HACD and CoACD binaries in the preferences.
+
+Now you should have a =ConvDecomp= panel in Blender's =N-menu= as shown in the
+screenshots.
+
+** Usage
+Select an object and a solver, then press =Run=.
+
+The solver may run for several minutes (especially CoACD) during which the
+Blender UI will be unresponsive. Afterwards, the shapes will appear in the scene
+and be parented to the original object. The addon will also place the shapes
+into a dedicated =convex hulls= collection to easily (un)hide all of them at
+once.
+
+The shape names adhere to the [[https://docs.unrealengine.com/4.27/en-US/WorkingWithContent/Importing/FBX/StaticMeshes/#collision][FBX convention]] for Unreal and you can export the
+mesh with the =Export= button. Please note that this is a convenience function
+only and not meant to replace a proper Blender -> Unreal workflow.
+
+Please refer to the official [[https://github.com/kmammou/v-hacd][V-HACD]] and [[https://github.com/SarahWeiii/CoACD][CoACD]] sites for an explanation of the
+parameters.
