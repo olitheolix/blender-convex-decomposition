@@ -108,7 +108,7 @@ class ConvexDecompositionClearOperator(ConvexDecompositionBaseOperator):
 
 
 class ConvexDecompositionUnrealExportOperator(ConvexDecompositionBaseOperator):
-    """Clear all collision shapes for selected object."""
+    """Export object with collision shapes as FBX."""
 
     bl_idname = 'opr.convex_decomposition_unreal_export'
     bl_label = 'Export object with Unreal Engine compatible collision meshes as FBX'
