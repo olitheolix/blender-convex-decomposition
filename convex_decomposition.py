@@ -278,7 +278,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         ]
         cmd.append("--pca") if props.b_pca else None
         cmd.append("--no-prerpocess") if props.b_no_preprocess else None
-        cmd.append("--no-merge") if props.b_disable_merge else None
+        cmd.append("--no-merge") if not props.b_merge else None
 
         self.report({"INFO"}, f"Running command <{cmd}>")
         subprocess.run(cmd, cwd=obj_file.parent)
@@ -542,10 +542,10 @@ class ConvexDecompositionPropertiesCoACD(bpy.types.PropertyGroup):
         ),
         default=True,
     )
-    b_disable_merge: bpy.props.BoolProperty(  # type: ignore
+    b_merge: bpy.props.BoolProperty(  # type: ignore
         name="Merge Post-Processing",
         description="",
-        default=False,
+        default=True,
     )
     b_pca: bpy.props.BoolProperty(  # type: ignore
         name="PCA Pre-Processing",
