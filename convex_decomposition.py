@@ -117,6 +117,11 @@ class ConvexDecompositionUnrealExportOperator(ConvexDecompositionBaseOperator):
         root_path = Path(bpy.path.abspath("//"))
         fname = root_path / f"{obj.name}.fbx"
 
+        # Temporarily move object to the centre of the scene to ensure it is
+        # centred for the export.
+        bak_location = obj.location.copy()
+        obj.location = (0, 0, 0)
+
         # Select all the children of this object.
         with SelectionGuard():
             for child in obj.children:
@@ -131,7 +136,10 @@ class ConvexDecompositionUnrealExportOperator(ConvexDecompositionBaseOperator):
                 axis_forward='-Z',
                 axis_up='Y',
             )
-        self.report({'INFO'}, f"Exported object to <{fname}>")
+
+        # Restore the original position.
+        obj.location = bak_location
+        self.report({'INFO'}, f"Exported object to <{fname.absolute()}>")
 
     def execute(self, context):
         # User must have exactly one object selected in OBJECT mode.
