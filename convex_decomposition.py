@@ -20,6 +20,7 @@ bl_info = {
 
 
 class ConvexDecompositionPreferences(bpy.types.AddonPreferences):
+    """Addon preferences menu."""
     bl_idname = "convex_decomposition"
 
     vhacd_binary: bpy.props.StringProperty(  # type: ignore
@@ -55,12 +56,18 @@ class SelectionGuard():
 
 
 class ConvexDecompositionBaseOperator(bpy.types.Operator):
-    """Base class with common utility methods"""
+    """Base class for the operators with common utility methods."""
 
     bl_idname = 'opr.convex_decomposition_base'
     bl_label = 'Convex Decomposition Base Class'
 
     def get_selected_object(self) -> Tuple[bpy_types.Object, bool]:
+        """Return the selected object.
+
+        Set the error flag if more or less than one object is currently
+        selected or if we are not in OBJECT mode.
+
+        """
         # User must be in OBJECT mode.
         if bpy.context.mode != 'OBJECT':
             self.report({'ERROR'}, "Must be in OBJECT mode")
@@ -75,18 +82,26 @@ class ConvexDecompositionBaseOperator(bpy.types.Operator):
         return selected[0], False
 
     def remove_stale_hulls(self, root_obj: bpy_types.Object) -> None:
+        """Remove the convex decomposition results from previous runs for `root_obj`."""
         with SelectionGuard(clear=True):
             for obj in bpy.data.objects:
                 if obj.name.startswith(f"UCX_{root_obj.name}_"):
                     obj.select_set(True)
             bpy.ops.object.delete()
 
-    def rename_hulls(self, hull_prefix: str, obj_name: str) -> List[bpy_types.Object]:
-        objs = [_ for _ in bpy.data.objects if _.name.startswith(hull_prefix)]
-        for i, obj in enumerate(objs):
-            name = f"UCX_{obj_name}_{i}"
-            obj.name = name
-        return objs
+    def rename_hulls(self, hull_prefix: str, parent: bpy_types.Object) -> List[bpy_types.Object]:
+        """Rename all convex hulls of `parent` to Unreal Engine format.
+
+        Rename all hulls to the format "UCX_{parent.name}_{seq-number}", eg
+        "UCX_Cube_12". This will ensure that Unreal Engine can load the object
+        and automatically recognise all its collision shapes.
+
+        """
+        hulls = [_ for _ in bpy.data.objects if _.name.startswith(hull_prefix)]
+        for i, hull_obj in enumerate(hulls):
+            name = f"UCX_{parent.name}_{i}"
+            hull_obj.name = name
+        return hulls
 
 
 class ConvexDecompositionClearOperator(ConvexDecompositionBaseOperator):
@@ -114,6 +129,16 @@ class ConvexDecompositionUnrealExportOperator(ConvexDecompositionBaseOperator):
     bl_label = 'Export object with Unreal Engine compatible collision meshes as FBX'
 
     def unreal_export(self, obj: bpy_types.Object) -> None:
+        """Export the object and its collision shapes to FBX.
+
+        The function will automatically centre the object for the export.
+
+        If the `obj` has collision shapes from a convex decomposition they will
+        be exported as well and Unreal Engine should automatically recognise
+        them on import.
+
+        """
+        # Output path.
         root_path = Path(bpy.path.abspath("//"))
         fname = root_path / f"{obj.name}.fbx"
 
@@ -157,28 +182,40 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
     bl_label = 'Convex Decomposition Base Class'
     bl_description = "Run Solver"
 
-    def upsert_collection(self, collection_name: str) -> bpy_types.Collection:
-        """ Upsert a dedicated outliner collection for the convex hulls."""
+    def upsert_collection(self, name: str) -> bpy_types.Collection:
+        """Create a dedicated collection` `name` for the convex hulls.
+
+        Does nothing if the collection already exists.
+
+        """
         try:
-            collection = bpy.data.collections[collection_name]
+            collection = bpy.data.collections[name]
         except KeyError:
-            collection = bpy.data.collections.new(collection_name)
+            collection = bpy.data.collections.new(name)
             bpy.context.scene.collection.children.link(collection)
         return collection
 
     def randomise_colour(self, obj: bpy_types.Object) -> None:
-        red, green, blue = [random.random() for _ in range(3)]
+        """Assign a random colour to `obj`."""
         alpha = 1.0
+        red, green, blue = [random.random() for _ in range(3)]
+
         material = bpy.data.materials.new("random material")
         material.diffuse_color = (red, green, blue, alpha)
         obj.data.materials.clear()
         obj.data.materials.append(material)
 
     def export_mesh_for_solver(self, obj: bpy_types.Object, path: Path) -> Path:
-        with SelectionGuard(clear=True):
-            obj.select_set(True)
+        """Save a temporary copy of `obj` in OBJ format to a temporary folder.
 
+        This is necessary because the various solvers all expect an OBJ file as input.
+
+        """
+        with SelectionGuard(clear=True):
             fname = path / "src.obj"
+
+            # Select `obj` and export it.
+            obj.select_set(True)
             bpy.ops.export_scene.obj(
                 filepath=str(fname),
                 check_existing=False,
@@ -190,7 +227,9 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
     def run_vhacd(self, obj_file: Path,
                   props: bpy.types.PropertyGroup,
                   binary: Path):
-        # Call VHACD to do the convex decomposition.
+        """
+        Compute convex decomposition for `obj_file` with VHACD.
+        """
         cmd = [
             binary,
             str(obj_file),
@@ -219,7 +258,9 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
     def run_coacd(self, obj_file: Path,
                   props: bpy.types.PropertyGroup,
                   binary: Path) -> Path:
-        # Call CoACD to do the convex decomposition.
+        """
+        Compute convex decomposition for `obj_file` with CoACD.
+        """
         result_file = obj_file.parent / "hulls.obj"
         cmd = [
             binary,
@@ -244,7 +285,9 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         return result_file
 
     def import_solver_results(self, fname: Path, hull_prefix: str):
-        # Replace all object names in the OBJ file that CoACD produced.
+        """Load the solver output `fname` (an OBJ file)."""
+        # Replace all object names in the OBJ file with a solver independent
+        # naming scheme.
         data = ""
         lines = fname.read_text().splitlines()
         for i, line in enumerate(lines):
@@ -274,12 +317,12 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
 
         self.remove_stale_hulls(root_obj)
 
-        # Save the selected root object as a temporary .obj file and use at
-        # as input for the solver.
+        # Save the selected root object to a temporary location for the solver.
         tmp_path = Path(tempfile.mkdtemp(prefix="devcomp-"))
-        self.report({"INFO"}, f"Created temporary directory for solvers: {tmp_path}")
-
+        self.report({"INFO"}, f"Created temporary directory for solver: {tmp_path}")
         obj_path = self.export_mesh_for_solver(root_obj, tmp_path)
+
+        # Use the selected solver to compute the convex decomposition.
         if props.solver == "VHACD":
             hull_path = self.run_vhacd(
                 obj_path,
@@ -296,10 +339,10 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         del obj_path, hull_path
 
         # Clean up the object names in Blender after the import.
-        hull_objs = self.rename_hulls(props.tmp_hull_prefix, root_obj.name)
+        hull_objs = self.rename_hulls(props.tmp_hull_prefix, root_obj)
 
-        # Parent the hulls to the root object, randomise their colours and place
-        # them into a dedicated Blender collection.
+        # Randomise the colours of the convex hulls, parent them to the
+        # original object and place them into a dedicated Blender collection.
         hull_collection = self.upsert_collection(props.hull_collection_name)
         for obj in hull_objs:
             # Unlink the current object from all its collections.
@@ -532,6 +575,9 @@ class ConvexDecompositionProperties(bpy.types.PropertyGroup):
         default='VHACD',
     )
 
+# ----------------------------------------------------------------------
+# Addon registration.
+# ----------------------------------------------------------------------
 
 
 CLASSES = [
