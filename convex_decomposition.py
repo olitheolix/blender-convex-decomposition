@@ -14,7 +14,7 @@ bl_info = {
     'category': 'Object',
     'version': (0, 1, 0),
     'author': 'Oliver Nagy',
-    'description': 'Create collision shapes and for FBX export to Unreal Engine',
+    'description': 'Create collision shapes for FBX export to Unreal Engine',
     'warning': 'WIP',
 }
 
