@@ -31,11 +31,21 @@ class ConvexDecompositionPreferences(bpy.types.AddonPreferences):
         name="CoACD Binary",
         subtype='FILE_PATH',
     )
+    alpha: bpy.props.IntProperty(  # type: ignore
+        name="Default hull transparency",
+        description="Default Alpha value of hulls in viewport",
+        default=90,
+        min=0,
+        max=100,
+        subtype='UNSIGNED'
+    )
 
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "vhacd_binary")
         layout.prop(self, "coacd_binary")
+        row = layout.row()
+        row.prop(self, "alpha")
 
 
 class SelectionGuard():
