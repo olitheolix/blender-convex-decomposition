@@ -195,13 +195,12 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             bpy.context.scene.collection.children.link(collection)
         return collection
 
-    def randomise_colour(self, obj: bpy_types.Object) -> None:
+    def randomise_colour(self, obj: bpy_types.Object, alpha: int) -> None:
         """Assign a random colour to `obj`."""
-        alpha = 1.0
         red, green, blue = [random.random() for _ in range(3)]
 
         material = bpy.data.materials.new("random material")
-        material.diffuse_color = (red, green, blue, alpha)
+        material.diffuse_color = (red, green, blue, alpha / 100.0)
         obj.data.materials.clear()
         obj.data.materials.append(material)
 
@@ -353,7 +352,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             hull_collection.objects.link(obj)
 
             # Assign a random colour to the hull.
-            self.randomise_colour(obj)
+            self.randomise_colour(obj, prefs.alpha)
 
             # Parent the hull to the root object without changing the relative transform.
             obj.parent = root_obj
