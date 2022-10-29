@@ -12,7 +12,7 @@ bl_info = {
     'name': 'Convex Decomposition',
     'blender': (3, 3, 0),
     'category': 'Object',
-    'version': (0, 1, 0),
+    'version': (0, 2, 0),
     'author': 'Oliver Nagy',
     'description': 'Create collision shapes for FBX export to Unreal Engine',
     'warning': 'WIP',
