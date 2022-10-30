@@ -371,32 +371,6 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         return {'FINISHED'}
 
 
-class ConvexDecompositionTransparencyOperator(ConvexDecompositionBaseOperator):
-    """Change transparency of hulls in viewport."""
-
-    bl_idname = 'opr.convex_decomposition_hull_transparency'
-    bl_label = 'Change transparency (ie alpha value) of hulls in viewport'
-
-    def execute(self, context):
-        # User must have exactly one object selected in OBJECT mode.
-        root_obj, err = self.get_selected_object()
-        if err:
-            return {'FINISHED'}
-
-        props = context.scene.ConvDecompProperties
-        alpha = props.alpha / 100.0
-
-        # Update the Alpha value for all children of selected object.
-        for obj in root_obj.children:
-            # Ignore any objects that are not collision hulls.
-            if not obj.name.startswith("UCX_"):
-                continue
-
-            mat = obj.data.materials[0]
-            mat.diffuse_color[3] = alpha
-        return {'FINISHED'}
-
-
 class ConvexDecompositionPanel(bpy.types.Panel):
     bl_idname = 'VIEW3D_PT_ConvDec'
     bl_label = 'Convex Decomposition'
@@ -437,12 +411,9 @@ class ConvexDecompositionPanel(bpy.types.Panel):
         row.operator('opr.convex_decomposition_clear', text="Clear")
         row.operator('opr.convex_decomposition_unreal_export', text="Export")
 
-        # Display "Apply" button to change transparency.
+        # Display "Hull Transparency" slider.
         layout.separator()
-        box = layout.box()
-        row = box.row()
-        row.prop(props, 'alpha')
-        row.operator('opr.convex_decomposition_hull_transparency', text="Apply")
+        layout.box().row().prop(props, 'alpha')
 
         # Solver Specific parameters.
         layout.separator()
@@ -596,6 +567,24 @@ class ConvexDecompositionPropertiesCoACD(bpy.types.PropertyGroup):
     )
 
 
+def update_alpha(self, context) -> None:
+    """Change the hull transparencies of all selected objects."""
+    # User must be in OBJECT mode.
+    if bpy.context.mode != 'OBJECT':
+        return
+
+    for root_obj in bpy.context.selected_objects:
+        props = context.scene.ConvDecompProperties
+        alpha = (100 - props.alpha) / 100.0
+
+        # Update the Alpha value for all children of selected object that are
+        # collision hulls.
+        for obj in root_obj.children:
+            if obj.name.startswith(f"UCX_{root_obj.name}_"):
+                mat = obj.data.materials[0]
+                mat.diffuse_color[3] = alpha
+
+
 class ConvexDecompositionProperties(bpy.types.PropertyGroup):
     tmp_hull_prefix: bpy.props.StringProperty(  # type: ignore
         name="Hull Prefix",
@@ -617,13 +606,15 @@ class ConvexDecompositionProperties(bpy.types.PropertyGroup):
         default='VHACD',
     )
     alpha: bpy.props.IntProperty(  # type: ignore
-        name="Alpha",
+        name="Hull Transparency",
         description="Transparency of hulls in viewport",
         default=90,
         min=0,
         max=100,
-        subtype='UNSIGNED'
+        subtype='UNSIGNED',
+        update=update_alpha,
     )
+
 
 # ----------------------------------------------------------------------
 # Addon registration.
@@ -636,7 +627,6 @@ CLASSES = [
     ConvexDecompositionPropertiesVHACD,
     ConvexDecompositionPropertiesCoACD,
     ConvexDecompositionRunOperator,
-    ConvexDecompositionTransparencyOperator,
     ConvexDecompositionClearOperator,
     ConvexDecompositionUnrealExportOperator,
     ConvexDecompositionPreferences,
