@@ -52,17 +52,26 @@ class SelectionGuard():
     """Ensure the same objects are selected at the end."""
     def __init__(self, clear: bool = False):
         self.clear = clear
+        self.selected = None
+        self.active = None
 
     def __enter__(self, clear=False):
         self.selected = bpy.context.selected_objects
+        self.active = bpy.context.view_layer.objects.active
+
         if self.clear:
             bpy.ops.object.select_all(action='DESELECT')
         return self
 
     def __exit__(self, *args, **kwargs):
         bpy.ops.object.select_all(action='DESELECT')
+        assert self.selected is not None
+        assert self.active is not None
         for obj in self.selected:
             obj.select_set(True)
+
+        # Restore the active object.
+        bpy.context.view_layer.objects.active = self.active
 
 
 class ConvexDecompositionBaseOperator(bpy.types.Operator):
