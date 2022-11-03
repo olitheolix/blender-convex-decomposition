@@ -124,20 +124,21 @@ class ConvexDecompositionBaseOperator(bpy.types.Operator):
 
 
 class ConvexDecompositionClearOperator(ConvexDecompositionBaseOperator):
-    """Clear all collision shapes for selected object."""
+    """Select the children of all selected objects."""
 
-    bl_idname = 'opr.convex_decomposition_clear'
-    bl_label = 'Clear Collision Shapes For Selected Object'
+    bl_idname = 'opr.convex_decomposition_select'
+    bl_label = 'Select all children of all selected objects'
 
     def execute(self, context):
-        # User must have exactly one object selected in OBJECT mode.
-        root_obj, err = self.get_selected_object()
-        if err:
-            return {'FINISHED'}
+        if bpy.context.mode != 'OBJECT':
+            self.report({'ERROR'}, "Must be in OBJECT mode")
+            return None, True
 
-        self.remove_stale_hulls(root_obj)
+        selected = bpy.context.selected_objects
+        for parent in selected:
+            for child in parent.children:
+                child.select_set(True)
 
-        self.report({'INFO'}, f"Removed all collision shapes for <{root_obj.name}>")
         return {'FINISHED'}
 
 
@@ -417,7 +418,7 @@ class ConvexDecompositionPanel(bpy.types.Panel):
 
         # Display <Clear> and <Export> buttons.
         row = layout.row()
-        row.operator('opr.convex_decomposition_clear', text="Clear")
+        row.operator('opr.convex_decomposition_select', text="Select")
         row.operator('opr.convex_decomposition_unreal_export', text="Export")
 
         # Display "Hull Transparency" slider.
