@@ -372,7 +372,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             hull_collection.objects.link(obj)
 
             # Assign a random colour to the hull.
-            self.randomise_colour(obj, prefs.alpha)
+            self.randomise_colour(obj, props.alpha)
 
             # Parent the hull to the root object without changing the relative transform.
             obj.parent = root_obj
