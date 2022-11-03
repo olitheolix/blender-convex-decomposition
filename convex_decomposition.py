@@ -34,8 +34,8 @@ class ConvexDecompositionPreferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, "vhacd_binary")
         layout.prop(self, "coacd_binary")
+        layout.prop(self, "vhacd_binary")
 
 
 class SelectionGuard():
