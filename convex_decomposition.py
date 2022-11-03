@@ -205,12 +205,12 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             bpy.context.scene.collection.children.link(collection)
         return collection
 
-    def randomise_colour(self, obj: bpy_types.Object, alpha: int) -> None:
+    def randomise_colour(self, obj: bpy_types.Object, transparency: int) -> None:
         """Assign a random colour to `obj`."""
         red, green, blue = [random.random() for _ in range(3)]
 
         material = bpy.data.materials.new("random material")
-        material.diffuse_color = (red, green, blue, (100 - alpha) / 100.0)
+        material.diffuse_color = (red, green, blue, (100 - transparency) / 100.0)
         obj.data.materials.clear()
         obj.data.materials.append(material)
 
@@ -567,7 +567,7 @@ class ConvexDecompositionPropertiesCoACD(bpy.types.PropertyGroup):
     )
 
 
-def update_alpha(self, context) -> None:
+def update_transparency(self, context) -> None:
     """Change the hull transparencies of all selected objects."""
     # User must be in OBJECT mode.
     if bpy.context.mode != 'OBJECT':
@@ -575,14 +575,14 @@ def update_alpha(self, context) -> None:
 
     for root_obj in bpy.context.selected_objects:
         props = context.scene.ConvDecompProperties
-        alpha = (100 - props.transparency) / 100.0
+        transparency = (100 - props.transparency) / 100.0
 
-        # Update the Alpha value for all children of selected object that are
-        # collision hulls.
+        # Update the transparency of all children of the selected object that
+        # are collision hulls.
         for obj in root_obj.children:
             if obj.name.startswith(f"UCX_{root_obj.name}_"):
                 mat = obj.data.materials[0]
-                mat.diffuse_color[3] = alpha
+                mat.diffuse_color[3] = transparency
 
 
 class ConvexDecompositionProperties(bpy.types.PropertyGroup):
@@ -612,7 +612,7 @@ class ConvexDecompositionProperties(bpy.types.PropertyGroup):
         min=0,
         max=100,
         subtype='UNSIGNED',
-        update=update_alpha,
+        update=update_transparency,
     )
 
 
