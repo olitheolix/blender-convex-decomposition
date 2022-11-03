@@ -220,7 +220,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         red, green, blue = [random.random() for _ in range(3)]
 
         material = bpy.data.materials.new("random material")
-        material.diffuse_color = (red, green, blue, alpha / 100.0)
+        material.diffuse_color = (red, green, blue, (100 - alpha) / 100.0)
         obj.data.materials.clear()
         obj.data.materials.append(material)
 
