@@ -362,7 +362,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             hull_collection.objects.link(obj)
 
             # Assign a random colour to the hull.
-            self.randomise_colour(obj, props.alpha)
+            self.randomise_colour(obj, props.transparency)
 
             # Parent the hull to the root object without changing the relative transform.
             obj.parent = root_obj
@@ -413,7 +413,7 @@ class ConvexDecompositionPanel(bpy.types.Panel):
 
         # Display "Hull Transparency" slider.
         layout.separator()
-        layout.box().row().prop(props, 'alpha')
+        layout.box().row().prop(props, 'transparency')
 
         # Solver Specific parameters.
         layout.separator()
@@ -575,7 +575,7 @@ def update_alpha(self, context) -> None:
 
     for root_obj in bpy.context.selected_objects:
         props = context.scene.ConvDecompProperties
-        alpha = (100 - props.alpha) / 100.0
+        alpha = (100 - props.transparency) / 100.0
 
         # Update the Alpha value for all children of selected object that are
         # collision hulls.
@@ -605,7 +605,7 @@ class ConvexDecompositionProperties(bpy.types.PropertyGroup):
         },
         default='VHACD',
     )
-    alpha: bpy.props.IntProperty(  # type: ignore
+    transparency: bpy.props.IntProperty(  # type: ignore
         name="Hull Transparency",
         description="Transparency of hulls in viewport",
         default=90,
