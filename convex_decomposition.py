@@ -10,11 +10,11 @@ import bpy_types  # type: ignore
 
 bl_info = {
     'name': 'Convex Decomposition',
-    'blender': (3, 3, 0),
+    'blender': (4, 1, 0),
     'category': 'Object',
-    'version': (0, 2, 0),
+    'version': (0, 3, 0),
     'author': 'Oliver Nagy',
-    'description': 'Create collision shapes for FBX export to Unreal Engine',
+    'description': 'Create collision shapes and Export to FBX (Unreal) or GLTF/GLB (Godot)',
     'warning': 'WIP',
 }
 
@@ -174,7 +174,7 @@ class ConvexDecompositionUnrealExportOperator(ConvexDecompositionBaseOperator):
 
         # Restore the original position.
         obj.location = bak_location
-        self.report({'INFO'}, f"Exported object to <{fname.absolute()}>")
+        self.report({'INFO'}, f"Exported object as FBX to <{fname.absolute()}>")
 
     def execute(self, context):
         # User must have exactly one object selected in OBJECT mode.
@@ -183,6 +183,58 @@ class ConvexDecompositionUnrealExportOperator(ConvexDecompositionBaseOperator):
             return {'FINISHED'}
 
         self.unreal_export(root_obj)
+        return {'FINISHED'}
+
+
+class ConvexDecompositionGodotExportOperator(ConvexDecompositionBaseOperator):
+    """Export object with collision shapes as GLB."""
+
+    bl_idname = 'opr.convex_decomposition_godot_export'
+    bl_label = 'Export object with Godot compatible collision meshes as GLB'
+
+    def godot_export(self, obj: bpy_types.Object) -> None:
+        """Export the object and its collision shapes to GLB.
+
+        The function will automatically centre the object for the export.
+
+        If the `obj` has collision shapes from a convex decomposition they will
+        be exported as well and Unreal Engine should automatically recognise
+        them on import.
+
+        """
+        # Output path.
+        root_path = Path(bpy.path.abspath("//"))
+        fname = root_path / f"{obj.name}.glb"
+
+        # Temporarily move object to the centre of the scene to ensure it is
+        # centred for the export.
+        bak_location = obj.location.copy()
+        obj.location = (0, 0, 0)
+
+        # Select all the children of this object.
+        with SelectionGuard():
+            for child in obj.children:
+                if child.name.startswith("UCX_"):
+                    child.select_set(True)
+
+            bpy.ops.export_scene.gltf(
+                filepath=str(fname),
+                check_existing=True,
+                use_selection=True,
+                export_format="GLB",
+            )
+
+        # Restore the original position.
+        obj.location = bak_location
+        self.report({'INFO'}, f"Exported object as GLB to <{fname.absolute()}>")
+
+    def execute(self, context):
+        # User must have exactly one object selected in OBJECT mode.
+        root_obj, err = self.get_selected_object()
+        if err:
+            return {'FINISHED'}
+
+        self.godot_export(root_obj)
         return {'FINISHED'}
 
 
@@ -225,11 +277,9 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
 
             # Select `obj` and export it.
             obj.select_set(True)
-            bpy.ops.export_scene.obj(
+            bpy.ops.wm.obj_export(
                 filepath=str(fname),
                 check_existing=False,
-                use_selection=True,
-                use_materials=False,
             )
         return fname
 
@@ -271,6 +321,11 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         Compute convex decomposition for `obj_file` with CoACD.
         """
         result_file = obj_file.parent / "hulls.obj"
+
+        preparg = "auto"
+        if props.b_no_preprocess:
+            preparg = "off"
+
         cmd = [
             binary,
             "--input", str(obj_file),
@@ -284,9 +339,9 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             "--mcts-node", str(props.i_mcts_node),
             "--prep-resolution", str(props.i_prep_resolution),
             "--resolution", str(props.i_resolution),
+            "--preprocess-mode", preparg,
         ]
         cmd.append("--pca") if props.b_pca else None
-        cmd.append("--no-prerpocess") if props.b_no_preprocess else None
         cmd.append("--no-merge") if not props.b_merge else None
 
         self.report({"INFO"}, f"Running command <{cmd}>")
@@ -308,7 +363,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
 
         # Import the hulls back into Blender.
         with SelectionGuard():
-            bpy.ops.import_scene.obj(
+            bpy.ops.wm.obj_import(
                 filepath=str(fname),
                 filter_glob='*.obj',
             )
@@ -409,7 +464,9 @@ class ConvexDecompositionPanel(bpy.types.Panel):
         # Display <Clear> and <Export> buttons.
         row = layout.row()
         row.operator('opr.convex_decomposition_select', text="Select")
-        row.operator('opr.convex_decomposition_unreal_export', text="Export")
+        row = layout.row()
+        row.operator('opr.convex_decomposition_unreal_export', text="Export FBX")
+        row.operator('opr.convex_decomposition_godot_export', text="Export GLB")
 
         # Display "Hull Transparency" slider.
         layout.separator()
@@ -629,6 +686,7 @@ CLASSES = [
     ConvexDecompositionRunOperator,
     ConvexDecompositionClearOperator,
     ConvexDecompositionUnrealExportOperator,
+    ConvexDecompositionGodotExportOperator,
     ConvexDecompositionPreferences,
 ]
 
