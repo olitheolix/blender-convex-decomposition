@@ -7,6 +7,8 @@ from typing import List, Tuple
 
 import bpy  # type: ignore
 import bpy_types  # type: ignore
+import bmesh
+from mathutils import Vector, Matrix
 
 bl_info = {
     'name': 'Convex Decomposition',
@@ -111,6 +113,28 @@ class ConvexDecompositionBaseOperator(bpy.types.Operator):
             name = f"UCX_{parent.name}_{i}"
             hull_obj.name = name
         return hulls
+
+    def upsert_collection(self, name: str) -> bpy_types.Collection:
+        """Create a dedicated collection` `name` for the convex hulls.
+
+        Does nothing if the collection already exists.
+
+        """
+        try:
+            collection = bpy.data.collections[name]
+        except KeyError:
+            collection = bpy.data.collections.new(name)
+            bpy.context.scene.collection.children.link(collection)
+        return collection
+
+    def randomise_colour(self, obj: bpy_types.Object, transparency: int) -> None:
+        """Assign a random colour to `obj`."""
+        red, green, blue = [random.random() for _ in range(3)]
+
+        material = bpy.data.materials.new("random material")
+        material.diffuse_color = (red, green, blue, (100 - transparency) / 100.0)
+        obj.data.materials.clear()
+        obj.data.materials.append(material)
 
 
 class ConvexDecompositionClearOperator(ConvexDecompositionBaseOperator):
@@ -237,34 +261,147 @@ class ConvexDecompositionGodotExportOperator(ConvexDecompositionBaseOperator):
         self.godot_export(root_obj)
         return {'FINISHED'}
 
+class ConvexDecompositionSplitByFaceOperator(ConvexDecompositionBaseOperator):
+    bl_idname = 'opr.convex_decomposition_split_by_face'
+    bl_label = 'Split by Face'
+    bl_description = "Split the selected object by the active face"
+
+    def split_mesh_by_face(self, context, obj):
+        if obj.type != 'MESH':
+            raise ValueError("Object is not a mesh")
+
+        # Store the current mode
+        original_mode = context.object.mode
+
+        # Enter edit mode if not already in it
+        if original_mode != 'EDIT':
+            bpy.ops.object.mode_set(mode='EDIT')
+
+        bm = bmesh.from_edit_mesh(obj.data)
+
+        # Get the selected face
+        selected_faces = [f for f in bm.faces if f.select]
+        if len(selected_faces) != 1:
+            bpy.ops.object.mode_set(mode=original_mode)
+            raise ValueError("Please select exactly one face")
+        face = selected_faces[0]
+
+        # Store face information
+        face_center = face.calc_center_median()
+        face_normal = face.normal.copy()
+
+        # Exit edit mode
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        # Create a cube
+        longest_dimension = max(obj.dimensions)
+        cube_size = longest_dimension * 2
+        bpy.ops.mesh.primitive_cube_add(size=cube_size)
+        cube = context.active_object
+
+        # Align cube's top face with the selected face
+        cube.rotation_euler = face_normal.to_track_quat('Z', 'Y').to_euler()
+        offset = face_normal * (cube_size / 2)
+        cube.location = obj.matrix_world @ face_center - offset
+
+        # Make two duplicates of the original mesh
+        new_obj1 = obj.copy()
+        new_obj1.data = obj.data.copy()
+        context.collection.objects.link(new_obj1)
+
+        new_obj2 = obj.copy()
+        new_obj2.data = obj.data.copy()
+        context.collection.objects.link(new_obj2)
+
+        # Boolean operations
+        bool_intersect = new_obj1.modifiers.new(name="Boolean", type='BOOLEAN')
+        bool_intersect.operation = 'INTERSECT'
+        bool_intersect.object = cube
+
+        bool_difference = new_obj2.modifiers.new(name="Boolean", type='BOOLEAN')
+        bool_difference.operation = 'DIFFERENCE'
+        bool_difference.object = cube
+
+        # Apply modifiers
+        context.view_layer.objects.active = new_obj1
+        bpy.ops.object.modifier_apply(modifier="Boolean")
+
+        context.view_layer.objects.active = new_obj2
+        bpy.ops.object.modifier_apply(modifier="Boolean")
+
+        # Remove the cube
+        bpy.data.objects.remove(cube, do_unlink=True)
+
+        # Ensure we're in object mode
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        context.view_layer.update()
+
+        return [new_obj1, new_obj2]
+
+    def execute(self, context):
+        props = context.scene.ConvDecompProperties
+
+        # Get the active object
+        obj = context.active_object
+        if obj is None:
+            self.report({'ERROR'}, "No active object")
+            return {'CANCELLED'}
+
+        # Check if the object is already a split part
+        is_split_part = obj.name.startswith("UCX_")
+        original_name = obj.name
+
+        # Perform the split
+        try:
+            new_objs = self.split_mesh_by_face(context, obj)
+        except ValueError as e:
+            self.report({'ERROR'}, str(e))
+            return {'CANCELLED'}
+
+        if is_split_part:
+            parent_obj = obj.parent
+            if parent_obj:
+                parent_name = parent_obj.name
+            else:
+                parent_name = original_name.split("_")[1]  # Fallback if no parent
+            # Remove the original object
+            bpy.data.objects.remove(obj, do_unlink=True)
+        else:
+            parent_name = original_name
+            parent_obj = obj
+
+        # Rename the new objects
+        hull_objs = []
+        for i, new_obj in enumerate(new_objs):
+            new_name = f"UCX_{parent_name}" # f"UCX_{parent_name}_{i}"
+            new_obj.name = new_name
+            hull_objs.append(new_obj)
+
+        # Set up the new objects (color, parenting, etc.)
+        hull_collection = self.upsert_collection(props.hull_collection_name)
+
+        for hull_obj in hull_objs:
+            # Unlink from current collections and link to hull collection
+            for coll in hull_obj.users_collection:
+                coll.objects.unlink(hull_obj)
+            hull_collection.objects.link(hull_obj)
+
+            # Assign random color
+            self.randomise_colour(hull_obj, props.transparency)
+
+            # Parent to the original object
+            if parent_obj:
+                hull_obj.parent = parent_obj
+                hull_obj.matrix_parent_inverse = parent_obj.matrix_world.inverted()
+
+        return {'FINISHED'}
 
 class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
     """Use VHACD or CoACD to create a convex decomposition of objects."""
     bl_idname = 'opr.convex_decomposition_run'
     bl_label = 'Convex Decomposition Base Class'
     bl_description = "Run Solver"
-
-    def upsert_collection(self, name: str) -> bpy_types.Collection:
-        """Create a dedicated collection` `name` for the convex hulls.
-
-        Does nothing if the collection already exists.
-
-        """
-        try:
-            collection = bpy.data.collections[name]
-        except KeyError:
-            collection = bpy.data.collections.new(name)
-            bpy.context.scene.collection.children.link(collection)
-        return collection
-
-    def randomise_colour(self, obj: bpy_types.Object, transparency: int) -> None:
-        """Assign a random colour to `obj`."""
-        red, green, blue = [random.random() for _ in range(3)]
-
-        material = bpy.data.materials.new("random material")
-        material.diffuse_color = (red, green, blue, (100 - transparency) / 100.0)
-        obj.data.materials.clear()
-        obj.data.materials.append(material)
 
     def export_mesh_for_solver(self, obj: bpy_types.Object, path: Path) -> Path:
         """Save a temporary copy of `obj` in OBJ format to a temporary folder.
@@ -440,26 +577,31 @@ class ConvexDecompositionPanel(bpy.types.Panel):
         layout = self.layout
 
         layout.prop(props, 'solver')
+
+        is_valid_solver = True
         if props.solver == "VHACD":
             binary = Path(prefs.vhacd_binary)
             solver_props = context.scene.ConvDecompPropertiesVHACD
+            is_valid_solver = binary.name != "" and binary.exists()
         elif props.solver == "CoACD":
             binary = Path(prefs.coacd_binary)
             solver_props = context.scene.ConvDecompPropertiesCoACD
+            is_valid_solver = binary.name != "" and binary.exists()
+        elif props.solver == "Manual":
+            row = layout.row()
+            row.operator('opr.convex_decomposition_split_by_face', text="Split by Face")
         else:
-            self.report({'ERROR'}, "Unknown Solver <{props.solver}>")
+            self.report({'ERROR'}, f"Unknown Solver <{props.solver}>")
             return
 
-        # Determine if solver binary is available.
-        is_valid_solver = True if binary.name != "" and binary.exists() else False
-
-        # Display "Run" button.
-        row = layout.row()
-        if is_valid_solver:
-            row.operator('opr.convex_decomposition_run', text="Run")
-        else:
-            row.label(text='Set Binary in Preferences')
-        row.enabled = is_valid_solver
+        # Display "Run" button for automatic solvers
+        if props.solver != "Manual":
+            row = layout.row()
+            if is_valid_solver:
+                row.operator('opr.convex_decomposition_run', text="Run")
+            else:
+                row.label(text='Set Binary in Preferences')
+            row.enabled = is_valid_solver
 
         # Display <Clear> and <Export> buttons.
         row = layout.row()
@@ -473,12 +615,13 @@ class ConvexDecompositionPanel(bpy.types.Panel):
         layout.box().row().prop(props, 'transparency')
 
         # Solver Specific parameters.
-        layout.separator()
-        box = layout.box()
-        box.enabled = is_valid_solver
-        solver_specific = [_ for _ in solver_props.__annotations__]
-        for name in solver_specific:
-            box.row().prop(solver_props, name)
+        if props.solver != "Manual":
+            layout.separator()
+            box = layout.box()
+            box.enabled = is_valid_solver
+            solver_specific = [_ for _ in solver_props.__annotations__]
+            for name in solver_specific:
+                box.row().prop(solver_props, name)
 
 
 class ConvexDecompositionPropertiesVHACD(bpy.types.PropertyGroup):
@@ -653,12 +796,13 @@ class ConvexDecompositionProperties(bpy.types.PropertyGroup):
         description="The collection to hold all the convex hulls.",
         default="convex hulls",
     )
-    solver: bpy.props.EnumProperty(  # type: ignore
+    solver: bpy.props.EnumProperty(
         name="Solver",
         description="Supported Convex Decomposition Solvers.",
         items={
             ('VHACD', 'VHACD', 'Use VHACD'),
             ('CoACD', 'CoACD', 'Use CoACD'),
+            ('Manual', 'Manual', 'Manual decomposition'),
         },
         default='VHACD',
     )
@@ -688,6 +832,7 @@ CLASSES = [
     ConvexDecompositionUnrealExportOperator,
     ConvexDecompositionGodotExportOperator,
     ConvexDecompositionPreferences,
+    ConvexDecompositionSplitByFaceOperator,
 ]
 
 def register():
