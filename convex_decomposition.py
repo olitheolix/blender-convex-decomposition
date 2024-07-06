@@ -458,11 +458,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
         Compute convex decomposition for `obj_file` with CoACD.
         """
         result_file = obj_file.parent / "hulls.obj"
-
-        preparg = "auto"
-        if props.b_no_preprocess:
-            preparg = "off"
-
+        preparg = "off" if props.b_no_preprocess else "auto"
         cmd = [
             binary,
             "--input", str(obj_file),
