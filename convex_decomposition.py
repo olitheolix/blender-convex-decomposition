@@ -417,6 +417,7 @@ class ConvexDecompositionRunOperator(ConvexDecompositionBaseOperator):
             bpy.ops.wm.obj_export(
                 filepath=str(fname),
                 check_existing=False,
+                export_selected_objects=True,
             )
         return fname
 
